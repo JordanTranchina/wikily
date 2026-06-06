@@ -284,7 +284,7 @@ export const PluelyApiSetup = () => {
 
   const title = isModelsLoading
     ? "Loading Models..."
-    : `Pluely supports ${models?.length} model${
+    : `Wikily supports ${models?.length} model${
         models?.length !== 1 ? "s" : ""
       }`;
 
@@ -292,7 +292,7 @@ export const PluelyApiSetup = () => {
     ? "Fetching the list of supported models..."
     : providerList
     ? `Access top models from providers like ${providerList}. and select smaller models for faster responses.`
-    : "Explore all the models Pluely supports.";
+    : "Explore all the models Wikily supports.";
 
   return (
     <div id="pluely-api" className="space-y-3 -mt-2">
@@ -478,13 +478,13 @@ export const PluelyApiSetup = () => {
       </div>
       <div className="flex justify-between items-center">
         <Header
-          title={`${pluelyApiEnabled ? "Disable" : "Enable"} Pluely API`}
+          title={`${pluelyApiEnabled ? "Disable" : "Enable"} Wikily API`}
           description={
             storedLicenseKey
               ? pluelyApiEnabled
-                ? "Using all pluely APIs for audio, and chat."
+                ? "Using all Wikily APIs for audio, and chat."
                 : "Using all your own AI Providers for audio, and chat."
-              : "A valid license is required to enable Pluely API or you can use your own AI Providers and STT Providers."
+              : "A valid license is required to enable Wikily API or you can use your own AI Providers and STT Providers."
           }
         />
         <Switch
