@@ -98,7 +98,7 @@ export const useMenuItems = () => {
     },
     {
       icon: PowerIcon,
-      label: "Quit pluely",
+      label: "Quit Wikily",
       action: async () => {
         await invoke("exit_app");
       },
