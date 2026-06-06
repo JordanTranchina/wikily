@@ -4,6 +4,7 @@ mod api;
 mod capture;
 mod db;
 mod shortcuts;
+mod wiki;
 mod window;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, WebviewWindow};
@@ -115,6 +116,7 @@ pub fn run() {
             speaker::get_audio_sample_rate,
             speaker::get_input_devices,
             speaker::get_output_devices,
+            wiki::scan_wiki_directory,
         ])
         .setup(|app| {
             // Setup main window positioning

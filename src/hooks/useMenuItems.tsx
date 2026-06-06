@@ -6,6 +6,7 @@ import {
   AudioLinesIcon,
   SquareSlashIcon,
   MonitorIcon,
+  BookOpenIcon,
   HomeIcon,
   PowerIcon,
   MailIcon,
@@ -31,6 +32,11 @@ export const useMenuItems = () => {
       icon: HomeIcon,
       label: "Dashboard",
       href: "/dashboard",
+    },
+    {
+      icon: BookOpenIcon,
+      label: "Wiki Engine",
+      href: "/wiki",
     },
     {
       icon: MessagesSquare,

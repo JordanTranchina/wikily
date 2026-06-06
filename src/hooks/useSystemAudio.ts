@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useWindowResize, useGlobalShortcuts } from ".";
+import { useWindowResize, useGlobalShortcuts, useWiki } from ".";
+import { WIKI_TRANSCRIPT_WINDOW_SIZE } from "@/config";
+import { WikiMatch } from "@/lib/wiki";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
@@ -110,6 +112,37 @@ export function useSystemAudio() {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Wikily: local wiki engine + proactive match state.
+  const wiki = useWiki();
+  const [wikiMatch, setWikiMatch] = useState<WikiMatch | null>(null);
+  const transcriptWindowRef = useRef<string[]>([]);
+  const dismissedDocRef = useRef<string | null>(null);
+
+  const dismissWikiMatch = useCallback(() => {
+    // Remember the dismissed doc so it doesn't immediately re-trigger.
+    dismissedDocRef.current = wikiMatch?.document.id ?? null;
+    setWikiMatch(null);
+  }, [wikiMatch]);
+
+  // Run the live transcript window through the local wiki matcher and surface a
+  // proactive card when confidence clears the threshold (spec §3.3 / M5).
+  const runWikiMatch = useCallback(
+    (latestUtterance: string) => {
+      if (!wiki.isReady()) return;
+      const win = transcriptWindowRef.current;
+      win.push(latestUtterance);
+      if (win.length > WIKI_TRANSCRIPT_WINDOW_SIZE) win.shift();
+
+      const result = wiki.match(win.join(" "));
+      if (!result) return;
+      // Suppress a card the user just dismissed for the same page.
+      if (result.document.id === dismissedDocRef.current) return;
+      dismissedDocRef.current = null;
+      setWikiMatch(result);
+    },
+    [wiki]
+  );
 
   // Load context settings and VAD config from localStorage on mount
   useEffect(() => {
@@ -275,6 +308,9 @@ export function useSystemAudio() {
               if (transcription.trim()) {
                 setLastTranscription(transcription);
                 setError("");
+
+                // Wikily: proactively match the live transcript window.
+                runWikiMatch(transcription);
 
                 const effectiveSystemPrompt = useSystemPrompt
                   ? systemPrompt || DEFAULT_SYSTEM_PROMPT
@@ -554,6 +590,16 @@ export function useSystemAudio() {
     try {
       setError("");
 
+      // Wikily: (re)index the currently-configured wiki directory so the
+      // overlay picks up changes made in the dashboard settings window.
+      const wikiDir = safeLocalStorage.getItem(STORAGE_KEYS.WIKI_DIRECTORY);
+      if (wikiDir?.trim()) {
+        wiki.scanAndIndex(wikiDir.trim()).catch(() => {});
+      }
+      transcriptWindowRef.current = [];
+      dismissedDocRef.current = null;
+      setWikiMatch(null);
+
       const hasAccess = await invoke<boolean>("check_system_audio_access");
       if (!hasAccess) {
         setSetupRequired(true);
@@ -627,6 +673,10 @@ export function useSystemAudio() {
       setLastAIResponse("");
       setError("");
       setIsPopoverOpen(false);
+      // Wikily: clear proactive match state.
+      transcriptWindowRef.current = [];
+      dismissedDocRef.current = null;
+      setWikiMatch(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to stop capture: ${errorMessage}`);
@@ -779,6 +829,10 @@ export function useSystemAudio() {
     setIsAIProcessing(false);
     setIsPopoverOpen(false);
     setUseSystemPrompt(true);
+    // Wikily: reset sliding window + proactive card.
+    transcriptWindowRef.current = [];
+    dismissedDocRef.current = null;
+    setWikiMatch(null);
   }, []);
 
   // Update VAD configuration
@@ -924,5 +978,8 @@ export function useSystemAudio() {
     ignoreContinuousRecording,
     // Scroll area ref for keyboard navigation
     scrollAreaRef,
+    // Wikily: proactive wiki match
+    wikiMatch,
+    dismissWikiMatch,
   };
 }

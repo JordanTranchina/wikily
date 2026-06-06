@@ -1,4 +1,11 @@
-import { Card, Updater, DragButton, CustomCursor, Button } from "@/components";
+import {
+  Card,
+  Updater,
+  DragButton,
+  CustomCursor,
+  Button,
+  WikiCard,
+} from "@/components";
 import {
   SystemAudio,
   Completion,
@@ -81,6 +88,13 @@ const App = () => {
           <Updater />
           <DragButton />
         </Card>
+        {/* Wikily: proactive wiki match card */}
+        {systemAudio?.wikiMatch ? (
+          <WikiCard
+            match={systemAudio.wikiMatch}
+            onDismiss={systemAudio.dismissWikiMatch}
+          />
+        ) : null}
         {customizable.cursor.type === "invisible" && platform !== "linux" ? (
           <CustomCursor />
         ) : null}
