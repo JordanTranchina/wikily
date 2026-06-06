@@ -7,6 +7,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "opener:allow-open-path",
     "updater:default",
     "keychain:default",
     "keychain:allow-get-item",

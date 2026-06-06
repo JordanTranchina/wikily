@@ -11,6 +11,7 @@ import {
   Screenshot,
   Chats,
   Responses,
+  Wiki,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 
@@ -29,6 +30,7 @@ export default function AppRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/audio" element={<Audio />} />
           <Route path="/responses" element={<Responses />} />
+          <Route path="/wiki" element={<Wiki />} />
           <Route path="/dev-space" element={<DevSpace />} />
         </Route>
       </Routes>

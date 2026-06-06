@@ -20,7 +20,16 @@ export const STORAGE_KEYS = {
   SELECTED_AUDIO_DEVICES: "selected_audio_devices",
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
+  // Wikily local wiki engine
+  WIKI_DIRECTORY: "wiki_directory",
+  WIKI_CONFIDENCE_THRESHOLD: "wiki_confidence_threshold",
 } as const;
+
+// Wikily: minimum match confidence (0..1) before a proactive card fades in.
+export const DEFAULT_WIKI_CONFIDENCE_THRESHOLD = 0.35;
+
+// Wikily: how many recent transcript utterances form the sliding context window.
+export const WIKI_TRANSCRIPT_WINDOW_SIZE = 4;
 
 // Max number of files that can be attached to a message
 export const MAX_FILES = 6;
