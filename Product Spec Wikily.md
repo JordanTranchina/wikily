@@ -4,6 +4,8 @@
 
 **Technical Strategy:** Fork of Pluely Core (Leveraging Pluely's macOS HUD & Audio Hooking)
 
+> **Note:** This is a product specification. For the authoritative technical design — including the actual stack (Tauri v2 / Rust / React, **not** native Swift) — see [`Tech Spec Wikily.md`](./Tech%20Spec%20Wikily.md). Where this document referenced implementation details, those have been aligned to the real Pluely codebase.
+
 ## **1\. Product Overview & Vision**
 
 ### **1.1 Elevator Pitch**
@@ -26,7 +28,7 @@ Rather than building a macOS audio routing driver and custom UI panel from scrat
 
 Pluely excels at desktop integration (HUD display, manual search triggers, global shortcuts) but suffers from high latency due to cloud-heavy RAG retrieval. By forking Pluely, we:
 
-1. **Reuse:** Keep the robust Swift/SwiftUI frontend overlay and system-level audio capture logic (ScreenCaptureKit / CoreAudio).  
+1. **Reuse:** Keep Pluely's robust floating overlay UI and system-level audio capture logic (CoreAudio on macOS, with cross-platform equivalents).  
 2. **Pivot:** Replace Pluely's remote cloud backend with a local, zero-latency vector comparison matching engine and a pre-compiled markdown wiki directory on the user's machine.
 
 ### **1.4 Core Hypothesis**
@@ -94,7 +96,7 @@ To validate the core hypothesis, the system must handle highly dynamic, project-
 
 ### **3.1 Live Audio Capture & Local Transcription (Pluely-Enhanced)**
 
-* **Inherited System Audio Routing:** Use Pluely’s existing virtual loopback driver/ScreenCaptureKit audio pipeline to tap outgoing mic audio and incoming Zoom client audio cleanly.  
+* **Inherited System Audio Routing:** Use Pluely’s existing system-audio capture pipeline (CoreAudio on macOS) to tap outgoing mic audio and incoming Zoom client audio cleanly.  
 * **On-Device/Low-Latency Transcription:** Replace Pluely's cloud-transcription endpoints with a lightweight, local transcription model (e.g., Whisper.cpp running on Apple Silicon Neural Engine) to keep processing entirely on-device.  
 * **Sliding Window Context:** Keep a moving window of the last 15–30 seconds of conversation transcript to extract semantic intent.
 
@@ -111,7 +113,7 @@ The core database is a structured local directory of .md files. Rather than trad
 
 ### **3.3 Proactive macOS HUD / Overlay (Pluely Fork UI)**
 
-* **Unobtrusive UI Design:** Repurpose Pluely's custom NSPanel overlay (which supports remaining on top of full-screen Zoom windows, custom opacity, dragging, and resizing).  
+* **Unobtrusive UI Design:** Repurpose Pluely's floating overlay panel (an NSPanel surfaced via `tauri-nspanel`, which supports remaining on top of full-screen Zoom windows, custom opacity, dragging, and resizing).  
 * **Frictionless Actions:**  
   * **Proactive Cards:** Instead of Pluely's manual search trigger, implement a background observer that auto-fades in cards when local match confidence exceeds a defined threshold (e.g., ![][image4]).  
   * **Copy-to-Clipboard:** Quick buttons to copy status updates or links.  
@@ -120,8 +122,8 @@ The core database is a structured local directory of .md files. Rather than trad
 ## **4\. Technical Architecture (MVP)**
 
 \+------------------------------------------------------------------------+  
-|                            Pluely Core (Upstream)                      |  
-|  \- Zoom Audio Capture (ScreenCaptureKit)   \- SwiftUI HUD Window Panel  |  
+|                       Pluely Core (Upstream, Tauri v2)                 |  
+|  \- Zoom Audio Capture (CoreAudio)   \- React HUD Panel (tauri-nspanel) |  
 \+------------------------------------------------------------------------+  
                                |  
                         Audio Streams & UI Hook  
@@ -142,14 +144,15 @@ The core database is a structured local directory of .md files. Rather than trad
                                                      v  
                                           \+----------------------+  
                                           |   macOS HUD Overlay  |  
-                                          |  (Pluely NSPanel UI) |  
+                                          | (Pluely tauri-nspanel)|  
                                           \+----------------------+
 
 ### **4.1 System Requirements & Tech Stack**
 
 * **Platform:** macOS 14.0+ (Optimized for Apple Silicon CoreML/Neural Engine).  
-* **Frontend/App Framework:** Swift / SwiftUI (Forked from Pluely, ensuring instant compatibility with floating panels over active Zoom calls).  
-* **Backend / Processing Core:** Swift-native local database integration \+ bundled Python helper binary or Rust-based core for local embeddings and markdown parsing.
+* **App Framework:** Tauri v2 (forked from Pluely), giving native floating panels (`tauri-nspanel`) that stay over active full-screen Zoom calls.  
+* **Frontend:** React + TypeScript + Tailwind CSS.  
+* **Backend / Processing Core:** Rust (Tokio async) with SQLite (`tauri-plugin-sql`); local embeddings and markdown parsing implemented in the Rust core. Local transcription via a bundled whisper.cpp sidecar.
 
 ### **4.2 Data & Security Architecture**
 
