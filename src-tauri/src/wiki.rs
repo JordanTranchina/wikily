@@ -5,7 +5,9 @@
 // on-device. No content ever leaves the machine (spec §4.2 "100% Local-First").
 
 use serde::Serialize;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 #[derive(Serialize)]
@@ -16,6 +18,17 @@ pub struct WikiFile {
     name: String,
     /// Raw markdown contents.
     content: String,
+    /// Stable hash of the raw contents, used by the frontend to skip
+    /// re-parsing/re-indexing files that have not changed (spec §5.7).
+    hash: String,
+}
+
+/// Cheap, stable content fingerprint. Only needs to detect change, not resist
+/// collisions, so the std hasher is fine and keeps us dependency-free.
+fn content_hash(content: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 #[derive(Serialize)]
@@ -78,10 +91,12 @@ fn walk(dir: &Path, files: &mut Vec<WikiFile>, scanned_dirs: &mut usize) {
                     .and_then(|n| n.to_str())
                     .unwrap_or("untitled")
                     .to_string();
+                let hash = content_hash(&content);
                 files.push(WikiFile {
                     path: path.to_string_lossy().to_string(),
                     name,
                     content,
+                    hash,
                 });
             }
         }

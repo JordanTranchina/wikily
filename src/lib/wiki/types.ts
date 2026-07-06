@@ -7,6 +7,8 @@ export interface RawWikiFile {
   path: string;
   name: string;
   content: string;
+  /** Stable content fingerprint from the scanner (used for incremental re-scan). */
+  hash?: string;
 }
 
 /** A deep link surfaced on a wiki card (e.g. a Notion page). */

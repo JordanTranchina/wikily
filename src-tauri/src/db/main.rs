@@ -17,5 +17,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/chat-history.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 3: Wikily wiki index cache + local-only match telemetry
+        Migration {
+            version: 3,
+            description: "create_wiki_index_tables",
+            sql: include_str!("migrations/wiki-index.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

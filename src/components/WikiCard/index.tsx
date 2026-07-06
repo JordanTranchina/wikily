@@ -14,13 +14,15 @@ import {
 interface WikiCardProps {
   match: WikiMatch;
   onDismiss: () => void;
+  /** Called when the rep copies or opens the card — engagement KPI (spec §7). */
+  onEngage?: () => void;
 }
 
 /**
  * Proactive Wikily HUD card (spec §3.3). Fades in over the active call when a
  * live transcript matches a local wiki page above the confidence threshold.
  */
-export const WikiCard = ({ match, onDismiss }: WikiCardProps) => {
+export const WikiCard = ({ match, onDismiss, onEngage }: WikiCardProps) => {
   const { document: doc, score } = match;
 
   // Build a copy-friendly status blob.
@@ -35,12 +37,23 @@ export const WikiCard = ({ match, onDismiss }: WikiCardProps) => {
 
   const { isCopied, handleCopy } = useCopyToClipboard({ text: copyText });
 
+  const handleCopyAndTrack = () => {
+    onEngage?.();
+    handleCopy();
+  };
+
   const openLocalFile = async () => {
+    onEngage?.();
     try {
       await openPath(doc.id);
     } catch (err) {
       console.error("Failed to open wiki file:", err);
     }
+  };
+
+  const openLink = (url: string) => {
+    onEngage?.();
+    openUrl(url);
   };
 
   return (
@@ -101,7 +114,7 @@ export const WikiCard = ({ match, onDismiss }: WikiCardProps) => {
               size="sm"
               variant="outline"
               className="h-6 text-[10px] gap-1 px-2"
-              onClick={handleCopy}
+              onClick={handleCopyAndTrack}
               title="Copy status to clipboard"
             >
               {isCopied ? (
@@ -129,7 +142,7 @@ export const WikiCard = ({ match, onDismiss }: WikiCardProps) => {
                 size="sm"
                 variant="outline"
                 className="h-6 text-[10px] gap-1 px-2"
-                onClick={() => openUrl(link.url)}
+                onClick={() => openLink(link.url)}
                 title={link.url}
               >
                 <ExternalLinkIcon className="h-3 w-3" />

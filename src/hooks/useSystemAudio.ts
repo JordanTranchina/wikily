@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useWindowResize, useGlobalShortcuts, useWiki } from ".";
 import { WIKI_TRANSCRIPT_WINDOW_SIZE } from "@/config";
-import { WikiMatch } from "@/lib/wiki";
+import { WikiMatch, stableHash } from "@/lib/wiki";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
 import { fetchSTT, fetchAIResponse } from "@/lib/functions";
+import { logMatch, markMatchClicked } from "@/lib";
 import {
   DEFAULT_QUICK_ACTIONS,
   DEFAULT_SYSTEM_PROMPT,
@@ -118,12 +119,21 @@ export function useSystemAudio() {
   const [wikiMatch, setWikiMatch] = useState<WikiMatch | null>(null);
   const transcriptWindowRef = useRef<string[]>([]);
   const dismissedDocRef = useRef<string | null>(null);
+  // Row id of the most recent logged match, so a later Copy/Open can flag it
+  // as engaged for the relevance KPI (spec §7).
+  const matchLogIdRef = useRef<string | null>(null);
 
   const dismissWikiMatch = useCallback(() => {
     // Remember the dismissed doc so it doesn't immediately re-trigger.
     dismissedDocRef.current = wikiMatch?.document.id ?? null;
     setWikiMatch(null);
   }, [wikiMatch]);
+
+  // Flag the current card as engaged (Copy/Open) for local-only telemetry.
+  const markWikiMatchClicked = useCallback(() => {
+    const id = matchLogIdRef.current;
+    if (id) void markMatchClicked(id);
+  }, []);
 
   // Run the live transcript window through the local wiki matcher and surface a
   // proactive card when confidence clears the threshold (spec §3.3 / M5).
@@ -134,12 +144,26 @@ export function useSystemAudio() {
       win.push(latestUtterance);
       if (win.length > WIKI_TRANSCRIPT_WINDOW_SIZE) win.shift();
 
-      const result = wiki.match(win.join(" "));
+      const windowText = win.join(" ");
+      const result = wiki.match(windowText);
       if (!result) return;
       // Suppress a card the user just dismissed for the same page.
       if (result.document.id === dismissedDocRef.current) return;
       dismissedDocRef.current = null;
       setWikiMatch(result);
+
+      // Local-only engagement telemetry: store a hash of the window, never the
+      // raw transcript text (spec §7 / §9).
+      matchLogIdRef.current = null;
+      if (wiki.matchLogEnabled) {
+        void logMatch({
+          windowTextHash: stableHash(windowText),
+          matchedFileId: result.document.id,
+          score: result.score,
+        }).then((id) => {
+          matchLogIdRef.current = id;
+        });
+      }
     },
     [wiki]
   );
@@ -269,29 +293,27 @@ export function useSystemAudio() {
             const audioBlob = new Blob([bytes], { type: "audio/wav" });
 
             const usePluelyAPI = await shouldUsePluelyAPI();
-            if (!selectedSttProvider.provider && !usePluelyAPI) {
-              setError("No speech provider selected.");
-              return;
-            }
-
             const providerConfig = allSttProviders.find(
               (p) => p.id === selectedSttProvider.provider
             );
+            // Cloud STT is only usable when a provider (or the Pluely relay) is
+            // configured. In local-first mode this is optional (spec §6).
+            const cloudAvailable =
+              usePluelyAPI || (!!selectedSttProvider.provider && !!providerConfig);
+            const localMode = wiki.transcriptionMode === "local";
 
-            if (!providerConfig && !usePluelyAPI) {
-              setError("Speech provider config not found.");
+            if (!localMode && !cloudAvailable) {
+              setError(
+                !selectedSttProvider.provider
+                  ? "No speech provider selected."
+                  : "Speech provider config not found."
+              );
               return;
             }
 
             setIsProcessing(true);
 
-            // Add timeout wrapper for STT request (30 seconds)
-            const sttPromise = fetchSTT({
-              provider: providerConfig,
-              selectedProvider: selectedSttProvider,
-              audio: audioBlob,
-            });
-
+            // Add timeout wrapper for cloud STT requests (30 seconds).
             const timeoutPromise = new Promise<string>((_, reject) => {
               setTimeout(
                 () => reject(new Error("Speech transcription timed out (30s)")),
@@ -299,11 +321,41 @@ export function useSystemAudio() {
               );
             });
 
-            try {
-              const transcription = await Promise.race([
-                sttPromise,
+            const runCloudStt = () =>
+              Promise.race([
+                fetchSTT({
+                  provider: providerConfig,
+                  selectedProvider: selectedSttProvider,
+                  audio: audioBlob,
+                }),
                 timeoutPromise,
               ]);
+
+            // Local-first: transcribe on-device via the whisper.cpp sidecar
+            // (spec §5.4). If the local model isn't installed yet, fall back to
+            // cloud STT only when the user has explicitly configured it (§6);
+            // otherwise prompt them to finish local setup.
+            const runTranscription = async (): Promise<string> => {
+              if (!localMode) return runCloudStt();
+              try {
+                return await invoke<string>("transcribe_local", {
+                  wavBase64: base64Audio,
+                });
+              } catch (localErr) {
+                const msg =
+                  localErr instanceof Error ? localErr.message : String(localErr);
+                if (msg.includes("LOCAL_TRANSCRIPTION_UNAVAILABLE")) {
+                  if (cloudAvailable) return runCloudStt();
+                  throw new Error(
+                    "On-device transcription isn't set up yet. Enable a cloud speech provider in Settings, or finish local whisper.cpp setup."
+                  );
+                }
+                throw localErr;
+              }
+            };
+
+            try {
+              const transcription = await runTranscription();
 
               if (transcription.trim()) {
                 setLastTranscription(transcription);
@@ -981,5 +1033,6 @@ export function useSystemAudio() {
     // Wikily: proactive wiki match
     wikiMatch,
     dismissWikiMatch,
+    markWikiMatchClicked,
   };
 }

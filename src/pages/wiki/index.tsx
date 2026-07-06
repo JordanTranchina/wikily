@@ -6,23 +6,35 @@ import {
   Textarea,
   Slider,
   Badge,
+  Switch,
 } from "@/components";
 import { PageLayout } from "@/layouts";
 import { useWiki } from "@/hooks";
 import { WikiMatch } from "@/lib/wiki";
+import { WikiSummaryMode } from "@/config";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   FolderSearchIcon,
+  FolderOpenIcon,
   LoaderIcon,
   RefreshCwIcon,
   SearchIcon,
   CheckCircle2Icon,
   AlertCircleIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
+
+const SUMMARY_MODES: { value: WikiSummaryMode; label: string; hint: string }[] = [
+  { value: "prebuilt", label: "Prebuilt", hint: "Use summaries already in the vault (fully local)" },
+  { value: "local-llm", label: "Local LLM", hint: "Generate via Ollama on-device" },
+  { value: "api", label: "Cloud API", hint: "Generate via a configured API key" },
+];
 
 /**
  * Wikily settings: point the app at a local "LLM Wiki" directory, index it
- * on-device, tune the proactive-trigger confidence, and test transcript
- * matching without needing a live call (spec §3.2 / Milestones 3 & 4).
+ * on-device, tune the proactive-trigger confidence, control the local-first
+ * privacy posture, and test transcript matching without a live call
+ * (spec §3.2 / §6 / Milestones 3 & 4).
  */
 const Wiki = () => {
   const {
@@ -30,6 +42,12 @@ const Wiki = () => {
     setDirectory,
     threshold,
     setThreshold,
+    transcriptionMode,
+    setTranscriptionMode,
+    summaryMode,
+    setSummaryMode,
+    matchLogEnabled,
+    setMatchLogEnabled,
     isIndexing,
     stats,
     error,
@@ -47,6 +65,21 @@ const Wiki = () => {
     setDirectory(pathDraft.trim());
     await scanAndIndex(pathDraft.trim());
     setTestResults(null);
+  };
+
+  const handleBrowse = async () => {
+    try {
+      const picked = await open({
+        directory: true,
+        multiple: false,
+        title: "Select your local wiki directory",
+      });
+      if (typeof picked === "string") {
+        setPathDraft(picked);
+      }
+    } catch (err) {
+      console.error("Directory picker failed:", err);
+    }
   };
 
   const handleTest = () => {
@@ -72,6 +105,15 @@ const Wiki = () => {
             placeholder="/Users/you/Documents/MyKnowledgeWiki"
             className="flex-1"
           />
+          <Button
+            onClick={handleBrowse}
+            variant="outline"
+            className="gap-1.5"
+            title="Browse for a folder"
+          >
+            <FolderOpenIcon className="h-4 w-4" />
+            Browse
+          </Button>
           <Button
             onClick={handleIndex}
             disabled={isIndexing || !pathDraft.trim()}
@@ -124,6 +166,73 @@ const Wiki = () => {
           <Badge variant="secondary" className="tabular-nums">
             {Math.round(threshold * 100)}%
           </Badge>
+        </div>
+      </div>
+
+      {/* Privacy & transcription (local-first, spec §6 / §9) */}
+      <div className="space-y-3">
+        <Header
+          title="Privacy & Transcription"
+          description="Wikily is local-first: call audio and transcripts stay on your machine. Cloud services are strictly opt-in."
+          isMainTitle
+        />
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-border/50 p-3">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">On-device transcription</p>
+            <p className="text-xs text-muted-foreground">
+              Transcribe locally via the bundled whisper.cpp model. If it isn't
+              installed yet, Wikily uses your configured cloud speech provider as
+              a fallback (only when you've set one up).
+            </p>
+          </div>
+          <Switch
+            checked={transcriptionMode === "local"}
+            onCheckedChange={(v) =>
+              setTranscriptionMode(v ? "local" : "cloud")
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5 rounded-lg border border-border/50 p-3">
+          <p className="text-sm font-medium">Card summaries</p>
+          <p className="text-xs text-muted-foreground">
+            How the 2-sentence status summary on a card is produced.
+          </p>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {SUMMARY_MODES.map((m) => (
+              <Button
+                key={m.value}
+                size="sm"
+                variant={summaryMode === m.value ? "default" : "outline"}
+                className="h-7 text-xs"
+                title={m.hint}
+                onClick={() => setSummaryMode(m.value)}
+              >
+                {m.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-border/50 p-3">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Local match telemetry</p>
+            <p className="text-xs text-muted-foreground">
+              Track how often you copy/open a surfaced card (the relevance KPI).
+              Stored locally as hashes only — never the raw transcript.
+            </p>
+          </div>
+          <Switch
+            checked={matchLogEnabled}
+            onCheckedChange={setMatchLogEnabled}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheckIcon className="h-3.5 w-3.5 text-green-500" />
+          The Pluely cloud relay is off by default; enable it explicitly in
+          Settings if you want a cloud fallback.
         </div>
       </div>
 

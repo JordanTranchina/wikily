@@ -5,14 +5,20 @@ import {
   matchTranscript,
   parseWikiFile,
   RawWikiFile,
+  WikiDocument,
   WikiIndex,
   WikiMatch,
 } from "@/lib/wiki";
 import {
   DEFAULT_WIKI_CONFIDENCE_THRESHOLD,
+  DEFAULT_WIKI_MATCH_LOG_ENABLED,
+  DEFAULT_WIKI_SUMMARY_MODE,
+  DEFAULT_WIKI_TRANSCRIPTION_MODE,
   STORAGE_KEYS,
+  WikiSummaryMode,
+  WikiTranscriptionMode,
 } from "@/config";
-import { safeLocalStorage } from "@/lib";
+import { safeLocalStorage, loadWikiCache, persistWikiCache } from "@/lib";
 
 interface ScanResult {
   files: RawWikiFile[];
@@ -43,6 +49,23 @@ export function useWiki() {
     const n = saved ? parseFloat(saved) : NaN;
     return Number.isFinite(n) ? n : DEFAULT_WIKI_CONFIDENCE_THRESHOLD;
   });
+  const [transcriptionMode, setTranscriptionModeState] =
+    useState<WikiTranscriptionMode>(
+      () =>
+        (safeLocalStorage.getItem(
+          STORAGE_KEYS.WIKI_TRANSCRIPTION_MODE
+        ) as WikiTranscriptionMode) || DEFAULT_WIKI_TRANSCRIPTION_MODE
+    );
+  const [summaryMode, setSummaryModeState] = useState<WikiSummaryMode>(
+    () =>
+      (safeLocalStorage.getItem(
+        STORAGE_KEYS.WIKI_SUMMARY_MODE
+      ) as WikiSummaryMode) || DEFAULT_WIKI_SUMMARY_MODE
+  );
+  const [matchLogEnabled, setMatchLogEnabledState] = useState<boolean>(() => {
+    const saved = safeLocalStorage.getItem(STORAGE_KEYS.WIKI_MATCH_LOG_ENABLED);
+    return saved === null ? DEFAULT_WIKI_MATCH_LOG_ENABLED : saved === "true";
+  });
   const [isIndexing, setIsIndexing] = useState(false);
   const [stats, setStats] = useState<WikiIndexStats | null>(null);
   const [error, setError] = useState<string>("");
@@ -63,9 +86,27 @@ export function useWiki() {
         const result = await invoke<ScanResult>("scan_wiki_directory", {
           path: target,
         });
-        const docs = result.files.map(parseWikiFile);
+
+        // Incremental parse: reuse cached parsed docs for files whose content
+        // hash is unchanged since the last index; only (re)parse changed/new
+        // files (spec §5.7). Falls back to a full parse if the cache is empty.
+        const cache = await loadWikiCache();
+        const persistEntries: { hash: string; doc: WikiDocument }[] = [];
+        const docs: WikiDocument[] = result.files.map((file) => {
+          const cached = file.hash ? cache.get(file.path) : undefined;
+          const doc =
+            cached && cached.hash === file.hash
+              ? cached.doc
+              : parseWikiFile(file);
+          persistEntries.push({ hash: file.hash ?? "", doc });
+          return doc;
+        });
+
         const index = buildIndex(docs);
         indexRef.current = index;
+
+        // Persist the fresh cache (best-effort; matching works in-memory too).
+        void persistWikiCache(persistEntries);
         const indexTimeMs = Math.round(performance.now() - started);
         const nextStats: WikiIndexStats = {
           documentCount: index.stats.documentCount,
@@ -105,6 +146,24 @@ export function useWiki() {
     );
   }, []);
 
+  const setTranscriptionMode = useCallback((mode: WikiTranscriptionMode) => {
+    setTranscriptionModeState(mode);
+    safeLocalStorage.setItem(STORAGE_KEYS.WIKI_TRANSCRIPTION_MODE, mode);
+  }, []);
+
+  const setSummaryMode = useCallback((mode: WikiSummaryMode) => {
+    setSummaryModeState(mode);
+    safeLocalStorage.setItem(STORAGE_KEYS.WIKI_SUMMARY_MODE, mode);
+  }, []);
+
+  const setMatchLogEnabled = useCallback((enabled: boolean) => {
+    setMatchLogEnabledState(enabled);
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.WIKI_MATCH_LOG_ENABLED,
+      String(enabled)
+    );
+  }, []);
+
   /** Run a raw search and return ranked matches (no threshold applied). */
   const search = useCallback((transcript: string): WikiMatch[] => {
     if (!indexRef.current) return [];
@@ -137,6 +196,12 @@ export function useWiki() {
     setDirectory,
     threshold,
     setThreshold,
+    transcriptionMode,
+    setTranscriptionMode,
+    summaryMode,
+    setSummaryMode,
+    matchLogEnabled,
+    setMatchLogEnabled,
     isIndexing,
     stats,
     error,
