@@ -23,6 +23,10 @@ export const STORAGE_KEYS = {
   // Wikily local wiki engine
   WIKI_DIRECTORY: "wiki_directory",
   WIKI_CONFIDENCE_THRESHOLD: "wiki_confidence_threshold",
+  // Wikily local-first controls (Tech Spec §6 / §9)
+  WIKI_TRANSCRIPTION_MODE: "wiki_transcription_mode",
+  WIKI_SUMMARY_MODE: "wiki_summary_mode",
+  WIKI_MATCH_LOG_ENABLED: "wiki_match_log_enabled",
 } as const;
 
 // Wikily: minimum match confidence (0..1) before a proactive card fades in.
@@ -30,6 +34,21 @@ export const DEFAULT_WIKI_CONFIDENCE_THRESHOLD = 0.35;
 
 // Wikily: how many recent transcript utterances form the sliding context window.
 export const WIKI_TRANSCRIPT_WINDOW_SIZE = 4;
+
+// Wikily transcription source. `local` keeps audio on-device via the whisper.cpp
+// sidecar (Tech Spec §5.4); `cloud` is the opt-in cloud STT fallback (§6).
+export type WikiTranscriptionMode = "local" | "cloud";
+export const DEFAULT_WIKI_TRANSCRIPTION_MODE: WikiTranscriptionMode = "local";
+
+// Wikily card-summary source (Tech Spec §5.6). `prebuilt` uses summaries already
+// compiled into the vault (fully local); `local-llm` calls Ollama; `api` uses a
+// configured cloud LLM key.
+export type WikiSummaryMode = "prebuilt" | "local-llm" | "api";
+export const DEFAULT_WIKI_SUMMARY_MODE: WikiSummaryMode = "prebuilt";
+
+// Wikily: local-only engagement telemetry (Tech Spec §7 KPI). Stores only
+// hashes + matched file ids, never raw transcript text. On by default.
+export const DEFAULT_WIKI_MATCH_LOG_ENABLED = true;
 
 // Max number of files that can be attached to a message
 export const MAX_FILES = 6;

@@ -4,6 +4,7 @@ mod api;
 mod capture;
 mod db;
 mod shortcuts;
+mod transcribe;
 mod wiki;
 mod window;
 use std::sync::{Arc, Mutex};
@@ -53,6 +54,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_shell::init()) // Add shell plugin
+        .plugin(tauri_plugin_dialog::init()) // Native file/dir picker (Wikily wiki dir)
         .plugin(posthog_init(PostHogConfig {
             api_key: posthog_api_key,
             options: Some(PostHogOptions {
@@ -117,6 +119,7 @@ pub fn run() {
             speaker::get_input_devices,
             speaker::get_output_devices,
             wiki::scan_wiki_directory,
+            transcribe::transcribe_local,
         ])
         .setup(|app| {
             // Setup main window positioning

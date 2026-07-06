@@ -93,6 +93,7 @@ const App = () => {
           <WikiCard
             match={systemAudio.wikiMatch}
             onDismiss={systemAudio.dismissWikiMatch}
+            onEngage={systemAudio.markWikiMatchClicked}
           />
         ) : null}
         {customizable.cursor.type === "invisible" && platform !== "linux" ? (
