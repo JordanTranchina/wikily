@@ -86,6 +86,8 @@ Capture and transcribe system audio in real-time. The system audio feature allow
 
 The system audio capture includes voice activity detection, real-time audio visualization, and automatic processing status indicators. Configure your preferred audio input devices in the Audio Settings page.
 
+Wikily is **local-first**: it can transcribe entirely on-device with whisper.cpp so call audio never leaves your machine, with cloud speech providers as an opt-in fallback. See [`docs/LOCAL_TRANSCRIPTION.md`](docs/LOCAL_TRANSCRIPTION.md) to enable it (`scripts/setup-whisper.sh`) and for the bundling/notarization roadmap.
+
 ## Voice Input
 
 Record your voice and convert it to text using advanced speech-to-text providers. The voice input feature supports multiple STT providers including OpenAI Whisper, ElevenLabs, Groq Whisper, and custom providers. Voice activity detection automatically identifies when you're speaking and processes your audio accordingly.
