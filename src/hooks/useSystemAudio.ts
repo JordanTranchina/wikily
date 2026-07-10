@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useWindowResize, useGlobalShortcuts, useWiki } from ".";
 import { WIKI_TRANSCRIPT_WINDOW_SIZE } from "@/config";
-import { WikiMatch, stableHash } from "@/lib/wiki";
+import { WikiMatch, stableHash, planLocalFallback } from "@/lib/wiki";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
@@ -344,13 +344,9 @@ export function useSystemAudio() {
               } catch (localErr) {
                 const msg =
                   localErr instanceof Error ? localErr.message : String(localErr);
-                if (msg.includes("LOCAL_TRANSCRIPTION_UNAVAILABLE")) {
-                  if (cloudAvailable) return runCloudStt();
-                  throw new Error(
-                    "On-device transcription isn't set up yet. Enable a cloud speech provider in Settings, or finish local whisper.cpp setup."
-                  );
-                }
-                throw localErr;
+                const decision = planLocalFallback(msg, cloudAvailable);
+                if (decision.fallback === "cloud") return runCloudStt();
+                throw new Error(decision.reason);
               }
             };
 

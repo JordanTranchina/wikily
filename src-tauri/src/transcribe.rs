@@ -13,7 +13,7 @@
 
 use base64::{engine::general_purpose, Engine as _};
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 
 /// Sentinel prefix the frontend matches to decide whether to degrade to cloud.
@@ -23,14 +23,28 @@ const UNAVAILABLE: &str = "LOCAL_TRANSCRIPTION_UNAVAILABLE";
 /// `bundle.externalBin` once packaging lands.
 const WHISPER_SIDECAR: &str = "whisper-cli";
 
-/// Resolve the whisper model path. Defaults to a conventional bundled location
-/// but is overridable via `WIKILY_WHISPER_MODEL` so a dev can point at a local
-/// `ggml-*.bin` without a full bundle.
-fn model_path() -> Option<PathBuf> {
+/// Resolve the whisper model file, in priority order:
+///   1. `WIKILY_WHISPER_MODEL` — explicit override (dev / custom path).
+///   2. `<app_data_dir>/whisper/ggml-*.en.bin` — the conventional drop-in
+///      location populated by `scripts/setup-whisper.sh` (see
+///      `docs/LOCAL_TRANSCRIPTION.md`).
+/// Returns `None` when no model is installed, so the caller can degrade to the
+/// cloud fallback instead of crashing.
+fn model_path(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(p) = std::env::var("WIKILY_WHISPER_MODEL") {
         let path = PathBuf::from(p);
         if path.exists() {
             return Some(path);
+        }
+    }
+    if let Ok(dir) = app.path().app_data_dir() {
+        let whisper_dir = dir.join("whisper");
+        // Prefer the smaller/faster models for streaming latency (spec §5.4).
+        for name in ["ggml-base.en.bin", "ggml-small.en.bin", "ggml-tiny.en.bin"] {
+            let candidate = whisper_dir.join(name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
         }
     }
     None
@@ -43,12 +57,12 @@ fn model_path() -> Option<PathBuf> {
 /// local model/sidecar is not installed yet.
 #[tauri::command]
 pub async fn transcribe_local(app: AppHandle, wav_base64: String) -> Result<String, String> {
-    let model = match model_path() {
+    let model = match model_path(&app) {
         Some(m) => m,
         None => {
             return Err(format!(
-                "{UNAVAILABLE}: whisper.cpp model not found. Set WIKILY_WHISPER_MODEL \
-                 or bundle a model, or enable the cloud transcription fallback in Settings."
+                "{UNAVAILABLE}: whisper.cpp model not found. Run scripts/setup-whisper.sh, \
+                 set WIKILY_WHISPER_MODEL, or enable the cloud transcription fallback in Settings."
             ));
         }
     };
