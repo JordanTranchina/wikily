@@ -1,0 +1,5 @@
+# whisper.cpp sidecar binaries are produced locally per-target by
+# scripts/bundle-whisper-sidecar.sh (Tech Spec §5.4). They are large and
+# platform-specific, so never commit them — only keep this directory.
+*
+!.gitignore
