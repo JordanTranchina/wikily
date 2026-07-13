@@ -53,16 +53,17 @@ These steps require a macOS build machine and are intentionally **not** wired
 into `tauri.conf.json` yet, because committing an `externalBin` entry without
 the binaries present would break `tauri build` on every platform.
 
-1. **Bundle the sidecar.** Produce `whisper-cli` for each release target
-   (`aarch64-apple-darwin`, `x86_64-apple-darwin`, and Windows/Linux if desired)
-   named with Tauri's target-triple suffix, place them under
-   `src-tauri/binaries/`, and add:
-   ```jsonc
-   // src-tauri/tauri.conf.json → bundle
-   "externalBin": ["binaries/whisper-cli"]
-   ```
-   Add a "fetch/build whisper-cli" step to `.github/workflows/publish.yml`
-   before `tauri-action` so releases can find the binaries.
+1. **Bundle the sidecar.** This is now staged as an **opt-in overlay** so the
+   default build never references a binary that isn't there:
+   - `src-tauri/tauri.whisper.conf.json` declares
+     `bundle.externalBin: ["binaries/whisper-cli"]`.
+   - `scripts/bundle-whisper-sidecar.sh` copies the CLI built by
+     `setup-whisper.sh` to `src-tauri/binaries/whisper-cli-<target-triple>`
+     (the naming Tauri expects). The binaries dir is git-ignored.
+   You build *with* the overlay to get a bundled app (see **Building a
+   whisper-bundled app** below). For CI releases, add a "build whisper-cli"
+   step to `.github/workflows/publish.yml` for each target and pass
+   `--config src-tauri/tauri.whisper.conf.json` to `tauri-action` (`args:`).
 2. **Ship a model.** Either bundle a quantized `ggml-*.en.bin` as a Tauri
    `resources` entry and copy it into `app_data_dir/whisper/` on first run, or
    download-on-first-run with a progress UI.
@@ -83,15 +84,51 @@ the binaries present would break `tauri build` on every platform.
    automatically. Verify the notarized `.app`/`.dmg` on a Mac with
    `spctl -a -vvv <path>` and `xcrun stapler validate <path>`.
 
+## Building a whisper-bundled app (at your Mac)
+
+Once you're on macOS (14+ Apple Silicon recommended), produce an app with
+whisper.cpp bundled in — three commands:
+
+```bash
+# 1. Build whisper.cpp + install a model into the app-data dir.
+scripts/setup-whisper.sh            # or: scripts/setup-whisper.sh small.en
+
+# 2. Stage the CLI as a Tauri sidecar (copies it to
+#    src-tauri/binaries/whisper-cli-<target-triple>).
+scripts/bundle-whisper-sidecar.sh
+
+# 3a. Run it in dev, WITH the overlay so the sidecar is bundled:
+npm run tauri dev -- --config src-tauri/tauri.whisper.conf.json
+
+# 3b. …or produce a distributable build:
+npm run tauri build -- --config src-tauri/tauri.whisper.conf.json
+```
+
+Then, in **Wiki Engine → Privacy & Transcription**, make sure **On-device
+transcription** is on. `transcribe_local` calls the bundled `whisper-cli`
+sidecar and reads the model from the app-data dir that step 1 populated.
+
+Notes:
+- **Model in a shipped app.** Step 1 installs the model into *your* machine's
+  app-data dir, so a locally built app finds it. To ship the model to other
+  users, also add the `ggml-*.en.bin` as a `bundle.resources` entry in the
+  overlay and copy it into `app_data_dir/whisper/` on first run (or download it
+  on first run with a progress UI).
+- **Signing.** For a signed/notarized build, combine the overlay with the Apple
+  secrets from step 3 of "Remaining work" — the bundled sidecar is signed as
+  part of the app payload automatically.
+
 ## Verifying end-to-end
 
 Local transcription can only be exercised on a real desktop build (the audio
-capture + float-panel stack is macOS-first). After `setup-whisper.sh`:
+capture + float-panel stack is macOS-first). `transcribe_local` invokes the
+whisper.cpp **sidecar**, which Tauri resolves only from a bundled binary — so
+to test on-device transcription you must run with the overlay (the
+"Building a whisper-bundled app" steps above), not a plain `npm run tauri dev`.
 
-```bash
-npm run tauri dev
-```
-
-Start a capture, speak, and confirm speaker text appears and a matching wiki
-card fades in. On a machine with no model installed and no cloud provider, the
-app should surface the "finish local setup" hint instead of erroring out.
+Without the overlay/sidecar, `transcribe_local` returns
+`LOCAL_TRANSCRIPTION_UNAVAILABLE` and the app falls back to your configured
+cloud provider (or shows the "finish local setup" hint if none is set) — that
+graceful-degradation path is worth confirming too. With the overlay: start a
+capture, speak, and confirm speaker text appears and a matching wiki card fades
+in.
