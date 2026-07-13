@@ -68,6 +68,27 @@ jobs:
           PAYMENT_ENDPOINT: ${{ secrets.PAYMENT_ENDPOINT }}
           APP_ENDPOINT: ${{ secrets.APP_ENDPOINT }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          # Apple code-signing + notarization (used on macOS runners only;
+          # tauri-action ignores these on Linux/Windows). If APPLE_CERTIFICATE
+          # is unset the build still succeeds but produces an *unsigned* app —
+          # so releases keep working until these repo secrets are added.
+          #
+          # Required repo secrets to produce a notarized macOS build:
+          #   APPLE_CERTIFICATE          base64 of the "Developer ID Application" .p12
+          #   APPLE_CERTIFICATE_PASSWORD password for that .p12
+          #   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Name (TEAMID)"
+          #   APPLE_ID                   Apple ID email used for notarization
+          #   APPLE_PASSWORD             app-specific password for that Apple ID
+          #   APPLE_TEAM_ID              10-char Apple Developer Team ID
+          # (Alternatively, swap APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID for the
+          #  App Store Connect API key trio APPLE_API_KEY / APPLE_API_ISSUER /
+          #  APPLE_API_KEY_PATH — see the Tauri signing docs.)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: app-v__VERSION__
           releaseName: "Pluely v__VERSION__"
