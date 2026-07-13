@@ -64,9 +64,12 @@ the binaries present would break `tauri build` on every platform.
    whisper-bundled app** below). For CI releases, add a "build whisper-cli"
    step to `.github/workflows/publish.yml` for each target and pass
    `--config src-tauri/tauri.whisper.conf.json` to `tauri-action` (`args:`).
-2. **Ship a model.** Either bundle a quantized `ggml-*.en.bin` as a Tauri
-   `resources` entry and copy it into `app_data_dir/whisper/` on first run, or
-   download-on-first-run with a progress UI.
+2. **Ship a model.** Also handled by the overlay: it bundles
+   `resources/whisper/*.bin` into the app, `bundle-whisper-sidecar.sh` stages
+   the model there, and `transcribe_local` resolves a model from the app's
+   resource dir at runtime — so a distributed app is self-contained and end
+   users don't need to run `setup-whisper.sh`. (The `resources/whisper/` dir is
+   git-ignored; only the `.gitignore` is committed.)
 3. **Code-sign + notarize.** `.github/workflows/publish.yml` now passes the
    Apple signing/notarization env vars to `tauri-action`, so all that's left is
    to add the repo secrets — until then the build stays unsigned (users see
@@ -106,17 +109,25 @@ npm run tauri build -- --config src-tauri/tauri.whisper.conf.json
 
 Then, in **Wiki Engine → Privacy & Transcription**, make sure **On-device
 transcription** is on. `transcribe_local` calls the bundled `whisper-cli`
-sidecar and reads the model from the app-data dir that step 1 populated.
+sidecar and resolves the model in this order: `WIKILY_WHISPER_MODEL` →
+`<app-data>/whisper/` (step 1) → the app's bundled resource dir (step 2).
 
 Notes:
-- **Model in a shipped app.** Step 1 installs the model into *your* machine's
-  app-data dir, so a locally built app finds it. To ship the model to other
-  users, also add the `ggml-*.en.bin` as a `bundle.resources` entry in the
-  overlay and copy it into `app_data_dir/whisper/` on first run (or download it
-  on first run with a progress UI).
+- **Self-contained distribution.** `bundle-whisper-sidecar.sh` copies the model
+  into `src-tauri/resources/whisper/`, and the overlay bundles it via the
+  `resources/whisper/*.bin` glob. So an app you hand to someone else already
+  contains the model and CLI — no `setup-whisper.sh` on their side. (If you
+  keep the model out, the app still works for anyone who has one in their
+  app-data dir or `WIKILY_WHISPER_MODEL`.)
+- **Overlay resources.** The overlay repeats the base bundle resources
+  (`info.plist`, `pluely.desktop`) because Tauri config-merge *replaces* arrays
+  rather than appending. If you add resources to `tauri.conf.json`, mirror them
+  in `tauri.whisper.conf.json` too.
+- **Model size.** `base.en` is ~140 MB, `small.en` ~460 MB — pick per your
+  size/accuracy tradeoff; the app probes base → small → tiny.
 - **Signing.** For a signed/notarized build, combine the overlay with the Apple
-  secrets from step 3 of "Remaining work" — the bundled sidecar is signed as
-  part of the app payload automatically.
+  secrets from step 3 of "Remaining work" — the bundled sidecar + model are
+  signed as part of the app payload automatically.
 
 ## Verifying end-to-end
 

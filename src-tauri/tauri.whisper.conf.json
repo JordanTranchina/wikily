@@ -1,6 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "externalBin": ["binaries/whisper-cli"]
+    "externalBin": ["binaries/whisper-cli"],
+    "resources": [
+      "info.plist",
+      "pluely.desktop",
+      "resources/whisper/*.bin"
+    ]
   }
 }
