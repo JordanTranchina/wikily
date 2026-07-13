@@ -23,13 +23,28 @@ const UNAVAILABLE: &str = "LOCAL_TRANSCRIPTION_UNAVAILABLE";
 /// `bundle.externalBin` once packaging lands.
 const WHISPER_SIDECAR: &str = "whisper-cli";
 
+/// Model filenames to probe within a whisper directory, smaller/faster first
+/// for streaming latency (spec §5.4).
+const MODEL_NAMES: [&str; 3] = ["ggml-base.en.bin", "ggml-small.en.bin", "ggml-tiny.en.bin"];
+
+fn first_model_in(dir: PathBuf) -> Option<PathBuf> {
+    for name in MODEL_NAMES {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Resolve the whisper model file, in priority order:
 ///   1. `WIKILY_WHISPER_MODEL` — explicit override (dev / custom path).
-///   2. `<app_data_dir>/whisper/ggml-*.en.bin` — the conventional drop-in
-///      location populated by `scripts/setup-whisper.sh` (see
-///      `docs/LOCAL_TRANSCRIPTION.md`).
+///   2. `<app_data_dir>/whisper/ggml-*.en.bin` — the per-user drop-in location
+///      populated by `scripts/setup-whisper.sh`.
+///   3. `<resource_dir>/resources/whisper/ggml-*.en.bin` — a model bundled into
+///      the app for distribution (via the `tauri.whisper.conf.json` overlay).
 /// Returns `None` when no model is installed, so the caller can degrade to the
-/// cloud fallback instead of crashing.
+/// cloud fallback instead of crashing. See `docs/LOCAL_TRANSCRIPTION.md`.
 fn model_path(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(p) = std::env::var("WIKILY_WHISPER_MODEL") {
         let path = PathBuf::from(p);
@@ -38,13 +53,15 @@ fn model_path(app: &AppHandle) -> Option<PathBuf> {
         }
     }
     if let Ok(dir) = app.path().app_data_dir() {
-        let whisper_dir = dir.join("whisper");
-        // Prefer the smaller/faster models for streaming latency (spec §5.4).
-        for name in ["ggml-base.en.bin", "ggml-small.en.bin", "ggml-tiny.en.bin"] {
-            let candidate = whisper_dir.join(name);
-            if candidate.exists() {
-                return Some(candidate);
-            }
+        if let Some(found) = first_model_in(dir.join("whisper")) {
+            return Some(found);
+        }
+    }
+    if let Ok(dir) = app.path().resource_dir() {
+        // Array-form bundled resources preserve their path relative to src-tauri,
+        // so they land under `<resource_dir>/resources/whisper/`.
+        if let Some(found) = first_model_in(dir.join("resources").join("whisper")) {
+            return Some(found);
         }
     }
     None

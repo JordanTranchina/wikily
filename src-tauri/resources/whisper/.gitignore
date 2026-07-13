@@ -1,0 +1,3 @@
+# Whisper models staged here for a distribution build (Tech Spec §5.4) by
+# scripts/bundle-whisper-sidecar.sh. They are large — never commit them.
+*.bin

@@ -36,10 +36,41 @@ mkdir -p "$DEST_DIR"
 DEST="$DEST_DIR/whisper-cli-$TRIPLE"
 cp "$BIN" "$DEST"
 chmod +x "$DEST"
-
 echo "Staged sidecar: $DEST"
+
+# Also stage the model into resources/ so a distribution build ships it inside
+# the app (so end users don't have to run setup-whisper.sh). The overlay's
+# `resources/whisper/*.bin` glob picks up whatever model is here, and
+# transcribe.rs resolves it from the app's resource dir at runtime.
+RES_DIR="$ROOT/src-tauri/resources/whisper"
+APP_ID="com.srikanthnani.pluely"
+case "$(uname -s)" in
+  Darwin) MODEL_SRC_DIR="$HOME/Library/Application Support/$APP_ID/whisper" ;;
+  Linux)  MODEL_SRC_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID/whisper" ;;
+  *)      MODEL_SRC_DIR="" ;;
+esac
+
+MODEL_SRC=""
+for name in ggml-base.en.bin ggml-small.en.bin ggml-tiny.en.bin; do
+  if [ -n "$MODEL_SRC_DIR" ] && [ -f "$MODEL_SRC_DIR/$name" ]; then
+    MODEL_SRC="$MODEL_SRC_DIR/$name"; break
+  fi
+  if [ -f "$WORKDIR/models/$name" ]; then
+    MODEL_SRC="$WORKDIR/models/$name"; break
+  fi
+done
+
+if [ -n "$MODEL_SRC" ]; then
+  mkdir -p "$RES_DIR"
+  cp "$MODEL_SRC" "$RES_DIR/$(basename "$MODEL_SRC")"
+  echo "Staged model:   $RES_DIR/$(basename "$MODEL_SRC")"
+else
+  echo "Note: no model found to bundle for distribution (run setup-whisper.sh)."
+  echo "      A local build still works via the app-data model + sidecar."
+fi
+
 echo ""
-echo "Now build WITH the whisper overlay so the sidecar is bundled:"
+echo "Now build WITH the whisper overlay so the sidecar (+ any staged model) is bundled:"
 echo "  npm run tauri build -- --config src-tauri/tauri.whisper.conf.json"
 echo "…or run a dev build:"
 echo "  npm run tauri dev -- --config src-tauri/tauri.whisper.conf.json"
