@@ -66,12 +66,22 @@ the binaries present would break `tauri build` on every platform.
 2. **Ship a model.** Either bundle a quantized `ggml-*.en.bin` as a Tauri
    `resources` entry and copy it into `app_data_dir/whisper/` on first run, or
    download-on-first-run with a progress UI.
-3. **Code-sign + notarize.** `publish.yml` currently only sets the Tauri
-   *updater* signing keys, so builds are unsigned (users see "Allow Anyway").
-   For a notarized build add an Apple Developer ID cert and the
-   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
-   `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` secrets consumed by
-   `tauri-action`, including the bundled sidecar in the signed payload.
+3. **Code-sign + notarize.** `.github/workflows/publish.yml` now passes the
+   Apple signing/notarization env vars to `tauri-action`, so all that's left is
+   to add the repo secrets — until then the build stays unsigned (users see
+   "Allow Anyway") but keeps succeeding. Add these repository secrets:
+   - `APPLE_CERTIFICATE` — base64 of your "Developer ID Application" `.p12`
+   - `APPLE_CERTIFICATE_PASSWORD` — password for that `.p12`
+   - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Name (TEAMID)`
+   - `APPLE_ID` — Apple ID email used for notarization
+   - `APPLE_PASSWORD` — an app-specific password for that Apple ID
+   - `APPLE_TEAM_ID` — your 10-character Apple Developer Team ID
+
+   (Or swap the last three for the App Store Connect API key trio
+   `APPLE_API_KEY` / `APPLE_API_ISSUER` / `APPLE_API_KEY_PATH`.) Once the
+   sidecar is bundled (step 1), it is included in the signed payload
+   automatically. Verify the notarized `.app`/`.dmg` on a Mac with
+   `spctl -a -vvv <path>` and `xcrun stapler validate <path>`.
 
 ## Verifying end-to-end
 
