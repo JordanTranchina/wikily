@@ -61,9 +61,15 @@ the binaries present would break `tauri build` on every platform.
      `setup-whisper.sh` to `src-tauri/binaries/whisper-cli-<target-triple>`
      (the naming Tauri expects). The binaries dir is git-ignored.
    You build *with* the overlay to get a bundled app (see **Building a
-   whisper-bundled app** below). For CI releases, add a "build whisper-cli"
-   step to `.github/workflows/publish.yml` for each target and pass
-   `--config src-tauri/tauri.whisper.conf.json` to `tauri-action` (`args:`).
+   whisper-bundled app** below). `.github/workflows/publish.yml` now does this
+   for the `aarch64-apple-darwin` release leg: it builds whisper.cpp via
+   `scripts/setup-whisper.sh` + `scripts/bundle-whisper-sidecar.sh` (cached
+   across runs) and passes `--config src-tauri/tauri.whisper.conf.json` to
+   `tauri-action`. The `x86_64-apple-darwin` leg is left as-is, since
+   GitHub's `macos-latest` runners are Apple Silicon and building an x86_64
+   `whisper-cli` there needs cross-compilation — that leg still produces a
+   working app, just without a bundled local model (falls back to cloud
+   transcription).
 2. **Ship a model.** Also handled by the overlay: it bundles
    `resources/whisper/*.bin` into the app, `bundle-whisper-sidecar.sh` stages
    the model there, and `transcribe_local` resolves a model from the app's
