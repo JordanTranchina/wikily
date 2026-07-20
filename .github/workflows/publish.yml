@@ -13,14 +13,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # GitHub's macos-latest runners are Apple Silicon, so whisper.cpp
+          # builds natively as arm64 here — only the aarch64 leg can bundle
+          # it without cross-compilation. The x86_64 leg still builds fine;
+          # it just falls back to cloud transcription (see
+          # docs/LOCAL_TRANSCRIPTION.md).
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
+            whisper: true
           - platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
+            whisper: false
           - platform: "ubuntu-22.04"
             args: ""
+            whisper: false
           - platform: "windows-latest"
             args: ""
+            whisper: false
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -57,6 +66,19 @@ jobs:
 
       - name: Install frontend deps
         run: npm ci
+
+      - name: Cache whisper.cpp build
+        if: matrix.whisper
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/wikily/whisper.cpp
+          key: whisper-cpp-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build whisper.cpp sidecar + model
+        if: matrix.whisper
+        run: |
+          scripts/setup-whisper.sh
+          scripts/bundle-whisper-sidecar.sh
 
       - name: Build & publish
         uses: tauri-apps/tauri-action@v0.5.16
@@ -97,4 +119,4 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          args: ${{ matrix.args }}
+          args: ${{ matrix.whisper && format('{0} --config src-tauri/tauri.whisper.conf.json', matrix.args) || matrix.args }}
