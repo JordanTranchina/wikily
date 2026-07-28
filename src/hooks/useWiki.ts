@@ -12,9 +12,11 @@ import {
 import {
   DEFAULT_WIKI_CONFIDENCE_THRESHOLD,
   DEFAULT_WIKI_MATCH_LOG_ENABLED,
+  DEFAULT_WIKI_SUGGESTION_FREQUENCY,
   DEFAULT_WIKI_SUMMARY_MODE,
   DEFAULT_WIKI_TRANSCRIPTION_MODE,
   STORAGE_KEYS,
+  WikiSuggestionFrequency,
   WikiSummaryMode,
   WikiTranscriptionMode,
 } from "@/config";
@@ -66,8 +68,16 @@ export function useWiki() {
     const saved = safeLocalStorage.getItem(STORAGE_KEYS.WIKI_MATCH_LOG_ENABLED);
     return saved === null ? DEFAULT_WIKI_MATCH_LOG_ENABLED : saved === "true";
   });
+  const [suggestionFrequency, setSuggestionFrequencyState] =
+    useState<WikiSuggestionFrequency>(
+      () =>
+        (safeLocalStorage.getItem(
+          STORAGE_KEYS.WIKI_SUGGESTION_FREQUENCY
+        ) as WikiSuggestionFrequency) || DEFAULT_WIKI_SUGGESTION_FREQUENCY
+    );
   const [isIndexing, setIsIndexing] = useState(false);
   const [stats, setStats] = useState<WikiIndexStats | null>(null);
+  const [lastIndexedAt, setLastIndexedAt] = useState<number | null>(null);
   const [error, setError] = useState<string>("");
 
   const indexRef = useRef<WikiIndex | null>(null);
@@ -115,6 +125,7 @@ export function useWiki() {
           indexTimeMs,
         };
         setStats(nextStats);
+        setLastIndexedAt(Date.now());
         if (docs.length === 0) {
           setError("No markdown files found in that directory.");
         }
@@ -164,6 +175,17 @@ export function useWiki() {
     );
   }, []);
 
+  const setSuggestionFrequency = useCallback(
+    (frequency: WikiSuggestionFrequency) => {
+      setSuggestionFrequencyState(frequency);
+      safeLocalStorage.setItem(
+        STORAGE_KEYS.WIKI_SUGGESTION_FREQUENCY,
+        frequency
+      );
+    },
+    []
+  );
+
   /** Run a raw search and return ranked matches (no threshold applied). */
   const search = useCallback((transcript: string): WikiMatch[] => {
     if (!indexRef.current) return [];
@@ -202,8 +224,11 @@ export function useWiki() {
     setSummaryMode,
     matchLogEnabled,
     setMatchLogEnabled,
+    suggestionFrequency,
+    setSuggestionFrequency,
     isIndexing,
     stats,
+    lastIndexedAt,
     error,
     scanAndIndex,
     search,

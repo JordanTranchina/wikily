@@ -2,3 +2,8 @@ export * from "./AlwaysOnTopToggle";
 export * from "./AppIconToggle";
 export * from "./AutostartToggle";
 export * from "./Theme";
+export * from "./PermissionsSection";
+export * from "./General";
+export * from "./KnowledgeBase";
+export * from "./Model";
+export * from "./Behavior";

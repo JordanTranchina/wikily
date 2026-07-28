@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   WIKI_TRANSCRIPTION_MODE: "wiki_transcription_mode",
   WIKI_SUMMARY_MODE: "wiki_summary_mode",
   WIKI_MATCH_LOG_ENABLED: "wiki_match_log_enabled",
+  WIKI_SUGGESTION_FREQUENCY: "wiki_suggestion_frequency",
 } as const;
 
 // Wikily: minimum match confidence (0..1) before a proactive card fades in.
@@ -33,6 +34,33 @@ export const DEFAULT_WIKI_CONFIDENCE_THRESHOLD = 0.35;
 
 // Wikily: how many recent transcript utterances form the sliding context window.
 export const WIKI_TRANSCRIPT_WINDOW_SIZE = 4;
+
+// Wikily: how eagerly the overlay surfaces a suggestion. Implemented as the
+// size of the sliding transcript window fed to the matcher — a smaller window
+// reacts to the latest utterance faster (more suggestions), a larger window
+// smooths over a longer stretch of the call (fewer, steadier suggestions).
+export type WikiSuggestionFrequency = "low" | "medium" | "high";
+export const DEFAULT_WIKI_SUGGESTION_FREQUENCY: WikiSuggestionFrequency =
+  "medium";
+export const WIKI_SUGGESTION_FREQUENCY_WINDOW: Record<
+  WikiSuggestionFrequency,
+  number
+> = {
+  high: 2,
+  medium: WIKI_TRANSCRIPT_WINDOW_SIZE,
+  low: 6,
+};
+
+// Wikily: named confidence-threshold presets shown in Settings → Behavior.
+// The underlying value is still the same 0..1 threshold used everywhere else.
+export const WIKI_CONFIDENCE_PRESETS: Record<
+  "low" | "medium" | "high",
+  number
+> = {
+  low: 0.2,
+  medium: DEFAULT_WIKI_CONFIDENCE_THRESHOLD,
+  high: 0.55,
+};
 
 // Wikily transcription source. `local` keeps audio on-device via the whisper.cpp
 // sidecar (Tech Spec §5.4); `cloud` is the opt-in cloud STT fallback (§6).
