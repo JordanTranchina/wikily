@@ -14,7 +14,6 @@ import {
 } from "@/config";
 import {
   safeLocalStorage,
-  shouldUsePluelyAPI,
   generateConversationTitle,
   saveConversation,
   CONVERSATION_SAVE_DEBOUNCE_MS,
@@ -292,14 +291,13 @@ export function useSystemAudio() {
             }
             const audioBlob = new Blob([bytes], { type: "audio/wav" });
 
-            const usePluelyAPI = await shouldUsePluelyAPI();
             const providerConfig = allSttProviders.find(
               (p) => p.id === selectedSttProvider.provider
             );
-            // Cloud STT is only usable when a provider (or the Pluely relay) is
-            // configured. In local-first mode this is optional (spec §6).
+            // Cloud STT is only usable when a provider is configured. In
+            // local-first mode this is optional (spec §6).
             const cloudAvailable =
-              usePluelyAPI || (!!selectedSttProvider.provider && !!providerConfig);
+              !!selectedSttProvider.provider && !!providerConfig;
             const localMode = wiki.transcriptionMode === "local";
 
             if (!localMode && !cloudAvailable) {
@@ -571,8 +569,7 @@ export function useSystemAudio() {
 
         let fullResponse = "";
 
-        const usePluelyAPI = await shouldUsePluelyAPI();
-        if (!selectedAIProvider.provider && !usePluelyAPI) {
+        if (!selectedAIProvider.provider) {
           setError("No AI provider selected.");
           return;
         }
@@ -580,14 +577,14 @@ export function useSystemAudio() {
         const provider = allAiProviders.find(
           (p) => p.id === selectedAIProvider.provider
         );
-        if (!provider && !usePluelyAPI) {
+        if (!provider) {
           setError("AI provider config not found.");
           return;
         }
 
         try {
           for await (const chunk of fetchAIResponse({
-            provider: usePluelyAPI ? undefined : provider,
+            provider,
             selectedProvider: selectedAIProvider,
             systemPrompt: prompt,
             history: previousMessages,

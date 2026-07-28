@@ -7,7 +7,6 @@ import {
   SquareSlashIcon,
   MonitorIcon,
   BookOpenIcon,
-  HomeIcon,
   PowerIcon,
   MailIcon,
   CoffeeIcon,
@@ -16,23 +15,15 @@ import {
   MessageSquareTextIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useApp } from "@/contexts";
 import { XIcon, GithubIcon } from "@/components";
 
 export const useMenuItems = () => {
-  const { hasActiveLicense } = useApp();
-
   const menu: {
     icon: React.ElementType;
     label: string;
     href: string;
     count?: number;
   }[] = [
-    {
-      icon: HomeIcon,
-      label: "Dashboard",
-      href: "/dashboard",
-    },
     {
       icon: BookOpenIcon,
       label: "Wiki Engine",
@@ -82,15 +73,11 @@ export const useMenuItems = () => {
   ];
 
   const footerItems = [
-    ...(hasActiveLicense
-      ? [
-          {
-            icon: MailIcon,
-            label: "Contact Support",
-            href: "mailto:support@pluely.com",
-          },
-        ]
-      : []),
+    {
+      icon: MailIcon,
+      label: "Contact Support",
+      href: "mailto:support@pluely.com",
+    },
     {
       icon: BugIcon,
       label: "Report a bug",
