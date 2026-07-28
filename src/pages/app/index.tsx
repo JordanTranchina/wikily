@@ -22,6 +22,14 @@ import { getPlatform } from "@/lib";
 
 const App = () => {
   const { isHidden, systemAudio } = useApp();
+  const {
+    quickActions,
+    handleQuickActionClick,
+    conversation,
+    isAIProcessing,
+    lastTranscription,
+    wikiSearch,
+  } = systemAudio;
   const { customizable } = useAppContext();
   const platform = getPlatform();
 
@@ -94,6 +102,12 @@ const App = () => {
             match={systemAudio.wikiMatch}
             onDismiss={systemAudio.dismissWikiMatch}
             onEngage={systemAudio.markWikiMatchClicked}
+            quickActions={quickActions}
+            onQuickAction={handleQuickActionClick}
+            conversation={conversation}
+            isAIProcessing={isAIProcessing}
+            onSearch={wikiSearch}
+            lastTranscription={lastTranscription}
           />
         ) : null}
         {customizable.cursor.type === "invisible" && platform !== "linux" ? (

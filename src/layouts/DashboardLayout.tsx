@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components";
+import { Sidebar, IndexingToast } from "@/components";
 import { Outlet } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "./ErrorLayout";
@@ -27,6 +27,8 @@ export const DashboardLayout = () => {
         <main className="flex flex-1 flex-col overflow-hidden px-8">
           <Outlet />
         </main>
+
+        <IndexingToast />
       </div>
     </ErrorBoundary>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useWindowResize, useGlobalShortcuts, useWiki } from ".";
-import { WIKI_TRANSCRIPT_WINDOW_SIZE } from "@/config";
+import { WIKI_SUGGESTION_FREQUENCY_WINDOW } from "@/config";
 import { WikiMatch, stableHash, planLocalFallback } from "@/lib/wiki";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -141,7 +141,9 @@ export function useSystemAudio() {
       if (!wiki.isReady()) return;
       const win = transcriptWindowRef.current;
       win.push(latestUtterance);
-      if (win.length > WIKI_TRANSCRIPT_WINDOW_SIZE) win.shift();
+      const windowSize =
+        WIKI_SUGGESTION_FREQUENCY_WINDOW[wiki.suggestionFrequency];
+      if (win.length > windowSize) win.splice(0, win.length - windowSize);
 
       const windowText = win.join(" ");
       const result = wiki.match(windowText);
@@ -1027,5 +1029,6 @@ export function useSystemAudio() {
     wikiMatch,
     dismissWikiMatch,
     markWikiMatchClicked,
+    wikiSearch: wiki.search,
   };
 }
