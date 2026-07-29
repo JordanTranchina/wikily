@@ -8,8 +8,6 @@ import { getPlatform, safeLocalStorage, trackAppStart } from "@/lib";
 import {
   getCustomizableState,
   setCustomizableState,
-  updateAppIconVisibility,
-  updateAlwaysOnTop,
   updateAutostart,
   CustomizableState,
   DEFAULT_CUSTOMIZABLE_STATE,
@@ -19,7 +17,6 @@ import {
 import { IContextType, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
 import curl2Json from "@bany/curl-to-json";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import {
@@ -288,26 +285,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     initializeApp();
   }, []);
 
-  // Handle customizable settings on state changes
-  useEffect(() => {
-    const applyCustomizableSettings = async () => {
-      try {
-        await Promise.all([
-          invoke("set_app_icon_visibility", {
-            visible: customizable.appIcon.isVisible,
-          }),
-          invoke("set_always_on_top", {
-            enabled: customizable.alwaysOnTop.isEnabled,
-          }),
-        ]);
-      } catch (error) {
-        console.error("Failed to apply customizable settings:", error);
-      }
-    };
-
-    applyCustomizableSettings();
-  }, [customizable]);
-
   useEffect(() => {
     const initializeAutostart = async () => {
       try {
@@ -334,35 +311,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     initializeAutostart();
-  }, []);
-
-  // Listen for app icon hide/show events when window is toggled
-  useEffect(() => {
-    const handleAppIconVisibility = async (isVisible: boolean) => {
-      try {
-        await invoke("set_app_icon_visibility", { visible: isVisible });
-      } catch (error) {
-        console.error("Failed to set app icon visibility:", error);
-      }
-    };
-
-    const unlistenHide = listen("handle-app-icon-on-hide", async () => {
-      const currentState = getCustomizableState();
-      // Only hide app icon if user has set it to hide mode
-      if (!currentState.appIcon.isVisible) {
-        await handleAppIconVisibility(false);
-      }
-    });
-
-    const unlistenShow = listen("handle-app-icon-on-show", async () => {
-      // Always show app icon when window is shown, regardless of user setting
-      await handleAppIconVisibility(true);
-    });
-
-    return () => {
-      unlistenHide.then((fn) => fn());
-      unlistenShow.then((fn) => fn());
-    };
   }, []);
 
   // Listen to storage events for real-time sync (e.g., multi-tab)
@@ -486,28 +434,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Toggle handlers
-  const toggleAppIconVisibility = async (isVisible: boolean) => {
-    const newState = updateAppIconVisibility(isVisible);
-    setCustomizable(newState);
-    try {
-      await invoke("set_app_icon_visibility", { visible: isVisible });
-      loadData();
-    } catch (error) {
-      console.error("Failed to toggle app icon visibility:", error);
-    }
-  };
-
-  const toggleAlwaysOnTop = async (isEnabled: boolean) => {
-    const newState = updateAlwaysOnTop(isEnabled);
-    setCustomizable(newState);
-    try {
-      await invoke("set_always_on_top", { enabled: isEnabled });
-      loadData();
-    } catch (error) {
-      console.error("Failed to toggle always on top:", error);
-    }
-  };
-
   const toggleAutostart = async (isEnabled: boolean) => {
     const newState = updateAutostart(isEnabled);
     setCustomizable(newState);
@@ -547,8 +473,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     screenshotConfiguration,
     setScreenshotConfiguration,
     customizable,
-    toggleAppIconVisibility,
-    toggleAlwaysOnTop,
     toggleAutostart,
     loadData,
     selectedAudioDevices,

@@ -216,16 +216,6 @@ export const AudioSelection = () => {
             </div>
           )}
         </div>
-
-        {/* Tips */}
-        <div className="text-xs text-muted-foreground/70">
-          <p>
-            💡 <strong>Tip:</strong> When you select a microphone, the app will
-            immediately switch to that device. You can verify by hovering over
-            the microphone button in the main interface - it will show the
-            active device name.
-          </p>
-        </div>
       </div>
 
       {/* System Audio Output Section */}
@@ -314,16 +304,6 @@ export const AudioSelection = () => {
               output in your system settings.
             </div>
           )}
-        </div>
-
-        {/* Tips */}
-        <div className="text-xs text-muted-foreground/70">
-          <p>
-            💡 <strong>Tip:</strong> System audio capture allows you to record
-            audio playing through your speakers or headphones. This is useful
-            for capturing conversation audio or system sounds along with your
-            voice.
-          </p>
         </div>
       </div>
     </div>

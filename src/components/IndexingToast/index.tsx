@@ -35,7 +35,7 @@ export const IndexingToast = () => {
         {stats.documentCount} pages indexed
       </span>
       <Link
-        to="/wiki"
+        to="/knowledge-base"
         onClick={() => setVisible(false)}
         className="text-xs font-semibold text-primary-foreground/80 underline hover:text-background"
       >

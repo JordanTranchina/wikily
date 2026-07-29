@@ -18,6 +18,7 @@ import {
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useWindowResize } from "@/hooks";
+import { getCheckForUpdatesEnabled } from "@/lib/storage";
 
 type UpdateState =
   | "checking"
@@ -118,9 +119,11 @@ export const Updater = () => {
     }
   };
 
-  // Check for updates on component mount
+  // Check for updates on component mount, unless the user disabled it
   useEffect(() => {
-    checkForUpdates();
+    if (getCheckForUpdatesEnabled()) {
+      checkForUpdates();
+    }
   }, []);
 
   // Handle window resizing when popover opens/closes

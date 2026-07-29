@@ -85,8 +85,6 @@ pub fn run() {
             shortcuts::get_registered_shortcuts,
             shortcuts::update_shortcuts,
             shortcuts::validate_shortcut_key,
-            shortcuts::set_app_icon_visibility,
-            shortcuts::set_always_on_top,
             shortcuts::exit_app,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,

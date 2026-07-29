@@ -1,18 +1,16 @@
 import {
   Settings,
-  Code,
   MessagesSquare,
-  WandSparkles,
   AudioLinesIcon,
-  SquareSlashIcon,
-  MonitorIcon,
-  BookOpenIcon,
   PowerIcon,
   MailIcon,
   CoffeeIcon,
   GlobeIcon,
   BugIcon,
-  MessageSquareTextIcon,
+  TerminalIcon,
+  LibraryIcon,
+  BrainIcon,
+  SlidersHorizontalIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { XIcon, GithubIcon } from "@/components";
@@ -25,34 +23,29 @@ export const useMenuItems = () => {
     count?: number;
   }[] = [
     {
-      icon: BookOpenIcon,
-      label: "Wiki Engine",
-      href: "/wiki",
-    },
-    {
       icon: MessagesSquare,
       label: "Chats",
       href: "/chats",
     },
     {
-      icon: WandSparkles,
-      label: "System prompts",
-      href: "/system-prompts",
-    },
-    {
       icon: Settings,
-      label: "App Settings",
-      href: "/settings",
+      label: "General",
+      href: "/general",
     },
     {
-      icon: MessageSquareTextIcon,
-      label: "Responses",
-      href: "/responses",
+      icon: LibraryIcon,
+      label: "Knowledge base",
+      href: "/knowledge-base",
     },
     {
-      icon: MonitorIcon,
-      label: "Screenshot",
-      href: "/screenshot",
+      icon: BrainIcon,
+      label: "Model",
+      href: "/model",
+    },
+    {
+      icon: SlidersHorizontalIcon,
+      label: "Behavior",
+      href: "/behavior",
     },
     {
       icon: AudioLinesIcon,
@@ -60,15 +53,9 @@ export const useMenuItems = () => {
       href: "/audio",
     },
     {
-      icon: SquareSlashIcon,
-      label: "Cursor & Shortcuts",
-      href: "/shortcuts",
-    },
-
-    {
-      icon: Code,
-      label: "Dev space",
-      href: "/dev-space",
+      icon: TerminalIcon,
+      label: "Dev Mode",
+      href: "/dev-mode",
     },
   ];
 
