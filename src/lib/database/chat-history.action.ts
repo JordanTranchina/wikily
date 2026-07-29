@@ -1,6 +1,6 @@
 import { getDatabase } from "./config";
 import { ChatConversation } from "@/types";
-import { safeLocalStorage } from "@/lib";
+import { safeLocalStorage, getSaveChatHistoryEnabled } from "@/lib";
 
 // Legacy localStorage key for migration purposes
 const LEGACY_CHAT_HISTORY_KEY = "chat_history";
@@ -339,11 +339,16 @@ export async function updateConversation(
 }
 
 /**
- * Save or update a conversation (upsert operation)
+ * Save or update a conversation (upsert operation).
+ * No-ops when the user hasn't opted into local chat history (Dev Mode).
  */
 export async function saveConversation(
   conversation: ChatConversation
 ): Promise<ChatConversation> {
+  if (!getSaveChatHistoryEnabled()) {
+    return conversation;
+  }
+
   if (!validateConversation(conversation)) {
     throw new Error("Invalid conversation data");
   }

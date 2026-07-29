@@ -27,6 +27,8 @@ export const STORAGE_KEYS = {
   WIKI_SUMMARY_MODE: "wiki_summary_mode",
   WIKI_MATCH_LOG_ENABLED: "wiki_match_log_enabled",
   WIKI_SUGGESTION_FREQUENCY: "wiki_suggestion_frequency",
+  CHECK_FOR_UPDATES_ENABLED: "check_for_updates_enabled",
+  DEV_SAVE_CHAT_HISTORY: "dev_save_chat_history_enabled",
 } as const;
 
 // Wikily: minimum match confidence (0..1) before a proactive card fades in.

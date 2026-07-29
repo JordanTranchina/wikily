@@ -93,7 +93,10 @@ const Onboarding = () => {
               Keep working — Wikily is indexing your files now and will let
               you know the moment it's ready.
             </p>
-            <Button className="mt-6 w-full" onClick={() => navigate("/wiki")}>
+            <Button
+              className="mt-6 w-full"
+              onClick={() => navigate("/knowledge-base")}
+            >
               Continue to Wikily
             </Button>
           </>

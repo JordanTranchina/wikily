@@ -1,12 +1,10 @@
 export { default as Chats } from "./chats";
 export { default as ViewChat } from "./chats/components/View";
 export { default as App } from "./app";
-export { default as SystemPrompts } from "./system-prompts";
-export { default as Settings } from "./settings";
-export { default as DevSpace } from "./dev";
-export { default as Shortcuts } from "./shortcuts";
+export { default as General } from "./general";
+export { default as KnowledgeBase } from "./knowledge-base";
+export { default as Model } from "./model";
+export { default as Behavior } from "./behavior";
 export { default as Audio } from "./audio";
-export { default as Screenshot } from "./screenshot";
-export { default as Responses } from "./responses";
-export { default as Wiki } from "./wiki";
+export { default as DevMode } from "./dev-mode";
 export { default as Onboarding } from "./onboarding";

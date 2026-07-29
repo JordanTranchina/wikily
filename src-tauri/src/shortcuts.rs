@@ -457,65 +457,6 @@ pub fn validate_shortcut_key(key: String) -> Result<bool, String> {
     }
 }
 
-/// Tauri command to set app icon visibility in dock/taskbar
-#[tauri::command]
-pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        // On macOS, use activation policy to control dock icon
-        let policy = if visible {
-            tauri::ActivationPolicy::Regular
-        } else {
-            tauri::ActivationPolicy::Accessory
-        };
-
-        app.set_activation_policy(policy).map_err(|e| {
-            eprintln!("Failed to set activation policy: {}", e);
-            format!("Failed to set activation policy: {}", e)
-        })?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, control taskbar icon visibility
-        if let Some(window) = app.get_webview_window("main") {
-            window
-                .set_skip_taskbar(!visible)
-                .map_err(|e| format!("Failed to set taskbar visibility: {}", e))?;
-        } else {
-            eprintln!("Main window not found on Windows");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // On Linux, control panel icon visibility
-        if let Some(window) = app.get_webview_window("main") {
-            window
-                .set_skip_taskbar(!visible)
-                .map_err(|e| format!("Failed to set panel visibility: {}", e))?;
-        } else {
-            eprintln!("Main window not found on Linux");
-        }
-    }
-
-    Ok(())
-}
-
-/// Tauri command to set always on top state
-#[tauri::command]
-pub fn set_always_on_top<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window
-            .set_always_on_top(enabled)
-            .map_err(|e| format!("Failed to set always on top: {}", e))?;
-    } else {
-        return Err("Main window not found".to_string());
-    }
-
-    Ok(())
-}
-
 /// Handle toggle dashboard shortcut
 fn handle_toggle_dashboard<R: Runtime>(app: &AppHandle<R>) {
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {

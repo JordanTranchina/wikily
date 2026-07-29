@@ -1,16 +1,14 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import {
   App,
-  SystemPrompts,
   ViewChat,
-  Settings,
-  DevSpace,
-  Shortcuts,
+  General,
+  KnowledgeBase,
+  Model,
+  Behavior,
   Audio,
-  Screenshot,
   Chats,
-  Responses,
-  Wiki,
+  DevMode,
   Onboarding,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
@@ -23,15 +21,13 @@ export default function AppRoutes() {
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<DashboardLayout />}>
           <Route path="/chats" element={<Chats />} />
-          <Route path="/system-prompts" element={<SystemPrompts />} />
           <Route path="/chats/view/:conversationId" element={<ViewChat />} />
-          <Route path="/shortcuts" element={<Shortcuts />} />
-          <Route path="/screenshot" element={<Screenshot />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/general" element={<General />} />
+          <Route path="/knowledge-base" element={<KnowledgeBase />} />
+          <Route path="/model" element={<Model />} />
+          <Route path="/behavior" element={<Behavior />} />
           <Route path="/audio" element={<Audio />} />
-          <Route path="/responses" element={<Responses />} />
-          <Route path="/wiki" element={<Wiki />} />
-          <Route path="/dev-space" element={<DevSpace />} />
+          <Route path="/dev-mode" element={<DevMode />} />
         </Route>
       </Routes>
     </Router>

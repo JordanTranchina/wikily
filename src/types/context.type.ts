@@ -36,8 +36,6 @@ export type IContextType = {
     React.SetStateAction<ScreenshotConfig>
   >;
   customizable: CustomizableState;
-  toggleAppIconVisibility: (isVisible: boolean) => Promise<void>;
-  toggleAlwaysOnTop: (isEnabled: boolean) => Promise<void>;
   toggleAutostart: (isEnabled: boolean) => Promise<void>;
   loadData: () => void;
   selectedAudioDevices: {
