@@ -1,5 +1,4 @@
 export * from "./useVersion";
-export * from "./useCompletion";
 export * from "./useChatCompletion";
 export * from "./useWindow";
 export * from "./useCustomProvider";
