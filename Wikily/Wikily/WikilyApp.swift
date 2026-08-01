@@ -24,16 +24,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless diagnostics: run, report, exit without building UI.
         // See CaptureDiagnostics for why these exist.
-        if CaptureDiagnostics.isProbeRequested() {
-            Task {
-                await CaptureDiagnostics.probe()
-                await MainActor.run { NSApplication.shared.terminate(nil) }
-            }
-            return
+        let diagnostic: (@Sendable () async -> Void)?
+        switch true {
+        case CaptureDiagnostics.isProbeRequested():
+            diagnostic = { await CaptureDiagnostics.probe() }
+        case CaptureDiagnostics.isSpeechProbeRequested():
+            diagnostic = { await CaptureDiagnostics.probeSpeech() }
+        case CaptureDiagnostics.isModelInstallRequested():
+            diagnostic = { await CaptureDiagnostics.installSpeechModel() }
+        case CaptureDiagnostics.requestedDuration() != nil:
+            let seconds = CaptureDiagnostics.requestedDuration()!
+            diagnostic = { await CaptureDiagnostics.run(seconds: seconds) }
+        default:
+            diagnostic = nil
         }
-        if let seconds = CaptureDiagnostics.requestedDuration() {
+
+        if let diagnostic {
             Task {
-                await CaptureDiagnostics.run(seconds: seconds)
+                await diagnostic()
                 await MainActor.run { NSApplication.shared.terminate(nil) }
             }
         }
