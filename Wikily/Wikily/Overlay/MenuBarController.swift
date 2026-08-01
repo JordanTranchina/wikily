@@ -3,29 +3,44 @@ import OSLog
 
 /// The menu-bar item.
 ///
-/// `LSUIElement` means no Dock icon and no main window, so this is currently the
-/// *only* way to control Wikily. That makes it a functional requirement rather
-/// than a convenience: if it fails to install, the app is unreachable and the
-/// user's only recourse is Force Quit.
+/// `LSUIElement` means no Dock icon and no main window, and Wikily deliberately
+/// registers no global hotkeys — that would mean asking for Accessibility, a
+/// permission far broader than anything the product needs. So this is the *only*
+/// way to control Wikily. That makes it a functional requirement rather than a
+/// convenience: if it fails to install, the app is unreachable and the user's
+/// only recourse is Force Quit, and it also means every action has to be here.
+/// Nothing may be reachable only by a keystroke.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
 
     private let session: CallSession
     private let overlay: OverlayWindowController
+    private let settings: AppSettings
     private let statusItem: NSStatusItem
 
-    init(session: CallSession, overlay: OverlayWindowController) {
+    init(
+        session: CallSession,
+        overlay: OverlayWindowController,
+        settings: AppSettings = .shared
+    ) {
         self.session = session
         self.overlay = overlay
+        self.settings = settings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
         let menu = NSMenu()
         menu.delegate = self
+        // Rebuilt from session state on every open, so AppKit's automatic
+        // validation has nothing to add and would only override the enablement
+        // decided in `menuNeedsUpdate`.
+        menu.autoenablesItems = false
         statusItem.menu = menu
         statusItem.button?.toolTip = "Wikily"
         refreshIcon()
         observePhase()
+        installWikiReloadHandler()
+        settings.reconcileLaunchAtLogin()
 
         // Logged because this is the app's only control surface: if the status
         // item ever fails to materialise, Wikily is unreachable and the symptom
@@ -34,6 +49,39 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             Menu bar item installed: button=\(self.statusItem.button != nil, privacy: .public) \
             visible=\(self.statusItem.isVisible, privacy: .public)
             """)
+
+        // Deferred by one turn rather than called inline, so the status item is
+        // on screen before the wizard's closing line claims it is. Skipped under
+        // `--overlay-preview`, which builds a controller to check the HUD and
+        // must stay non-interactive.
+        if OverlayPreview.requestedVaultPath() == nil {
+            Task { @MainActor in self.presentOnboardingIfNeeded() }
+        }
+    }
+
+    /// Teaches `AppSettings` how to rebuild the index.
+    ///
+    /// Done here because this controller is the only long-lived object that
+    /// holds both a `CallSession` and the settings store. It belongs in whatever
+    /// assembles the app once there is one; until then, putting it anywhere else
+    /// means Settings' Re-scan button silently does nothing.
+    private func installWikiReloadHandler() {
+        settings.wikiReloadHandler = { [weak session] path in
+            guard let session else { return nil }
+            await session.loadWiki(directory: path)
+            // Reported from the session's own index rather than recomputed, so
+            // the numbers in Settings are the numbers matching actually uses.
+            return session.index.stats
+        }
+    }
+
+    /// Show the first-run wizard if this install has never seen it.
+    ///
+    /// Driven from here rather than from the app delegate because this is the
+    /// object that owns the app's control surface, and the wizard's last step
+    /// points at it. Exposed so whatever assembles the app can take it over.
+    func presentOnboardingIfNeeded() {
+        OnboardingWindowController.presentIfNeeded(settings: settings)
     }
 
     private let logger = Logger(subsystem: "com.wikily.Wikily", category: "MenuBarController")
@@ -106,6 +154,37 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         chooseFolder.target = self
         menu.addItem(chooseFolder)
 
+        let rescan = NSMenuItem(
+            title: "Re-scan Wiki",
+            action: #selector(rescanWiki),
+            keyEquivalent: ""
+        )
+        rescan.target = self
+        rescan.isEnabled = settings.wikiFolderPath != nil
+        menu.addItem(rescan)
+
+        menu.addItem(.separator())
+
+        // ⌘, is shown because it is the shortcut every Mac user reaches for, and
+        // it works *while this menu is open*. It does not work globally — Wikily
+        // has no menu bar of its own to route it — which is exactly why the item
+        // has to exist rather than relying on the keystroke.
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        let setup = NSMenuItem(
+            title: "Setup Assistant…",
+            action: #selector(openOnboarding),
+            keyEquivalent: ""
+        )
+        setup.target = self
+        menu.addItem(setup)
+
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "Quit Wikily", action: #selector(quit), keyEquivalent: "q")
@@ -124,9 +203,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private var wikiLine: String {
-        guard session.wikiFolderPath != nil else { return "No wiki folder chosen" }
-        let count = session.index.documents.count
-        return "\(count) page\(count == 1 ? "" : "s") indexed"
+        guard settings.wikiFolderPath != nil else { return "No wiki folder chosen" }
+        return SettingsFormatting.count(session.index.documents.count, singular: "page")
+            + " indexed"
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {
@@ -173,7 +252,26 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        Task { await session.loadWiki(directory: url.path) }
+        // Through `AppSettings` rather than straight to the session, so the
+        // choice is persisted and the Knowledge Base tab's stats stay truthful.
+        Task { try? await settings.setWikiFolder(url.path) }
+    }
+
+    @objc private func rescanWiki() {
+        Task { try? await settings.rescanWiki() }
+    }
+
+    /// Open the settings window.
+    ///
+    /// Not `NSApp.sendAction(showSettingsWindow:)`. That is the usual way to
+    /// reach a SwiftUI `Settings` scene and it silently does nothing here — see
+    /// `SettingsWindowController` for the measurement and the reason.
+    @objc private func openSettings() {
+        SettingsWindowController.present(settings: settings)
+    }
+
+    @objc private func openOnboarding() {
+        OnboardingWindowController.present(settings: settings)
     }
 
     @objc private func quit() {
