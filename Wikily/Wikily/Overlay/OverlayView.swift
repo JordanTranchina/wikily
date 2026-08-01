@@ -23,7 +23,19 @@ struct OverlayView: View {
     @State private var isCollapsed = false
     @State private var didCopy = false
 
+    /// Whether the ask field holds the keyboard. Tracked so Escape can hand it
+    /// back to the call, and so the field can show that it has it.
+    @FocusState private var isAskFocused: Bool
+
     private var document: WikiDocument? { session.currentMatch?.document }
+
+    private var ask: AskSession { session.askSession }
+
+    /// `ask` is a computed property, so `$ask.draft` doesn't exist. The session
+    /// owns the draft deliberately — clearing it on send belongs in one place.
+    private var askDraft: Binding<String> {
+        Binding(get: { ask.draft }, set: { ask.draft = $0 })
+    }
 
     var body: some View {
         Group {
@@ -103,6 +115,7 @@ struct OverlayView: View {
             }
 
             transcriptStrip
+            askSection
         }
         .padding(12)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -224,6 +237,110 @@ struct OverlayView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Ask Wikily
+
+    /// Quick actions, the answer thread, and the ask field.
+    ///
+    /// The text field is the only control here that takes keyboard focus. The
+    /// panel is `.nonactivatingPanel` with `becomesKeyOnlyIfNeeded`, so clicking
+    /// a *button* steals nothing, and only clicking into the field routes
+    /// keystrokes away from the call. Escape hands them straight back — that is
+    /// the whole mitigation for typing during a live call, so it matters more
+    /// than it looks.
+    @ViewBuilder
+    private var askSection: some View {
+        Divider().opacity(0.5)
+
+        WrapLayout(spacing: 6) {
+            ForEach(QuickAction.allCases) { action in
+                HUDActionButton(title: action.title, systemImage: action.systemImage) {
+                    session.run(action)
+                }
+                .disabled(ask.isAnswering)
+            }
+        }
+
+        if !ask.messages.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(ask.messages) { message in
+                    askBubble(message)
+                }
+                if ask.isAnswering {
+                    Text("Thinking…")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+
+        if let message = ask.errorMessage {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 6) {
+            TextField("Ask Wikily…", text: askDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .focused($isAskFocused)
+                .onSubmit { session.submitAsk() }
+                .onKeyPress(.escape) {
+                    // Give the keyboard back to the call rather than making the
+                    // user click away to reach their mute shortcut.
+                    isAskFocused = false
+                    NSApp.keyWindow?.resignKey()
+                    return .handled
+                }
+
+            if ask.isAnswering {
+                HUDIconButton("stop.circle", help: "Stop answering") { ask.cancel() }
+            } else {
+                HUDIconButton("arrow.up.circle.fill", help: "Ask") { session.submitAsk() }
+                    .disabled(!ask.canSend)
+            }
+
+            if !ask.messages.isEmpty {
+                HUDIconButton("trash", help: "Clear thread") { ask.clear() }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(.primary.opacity(0.06)))
+        .overlay(
+            Capsule().strokeBorder(
+                isAskFocused ? Color.accentColor.opacity(0.6) : .primary.opacity(0.12)
+            )
+        )
+    }
+
+    private func askBubble(_ message: AskSession.Message) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            if message.role == .user {
+                Spacer(minLength: 24)
+                Text(message.text)
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.85))
+                    )
+                    .foregroundStyle(.white)
+            } else {
+                WikilyMark(size: 13)
+                Text(message.text)
+                    .font(.system(size: 11))
+                    .fixedSize(horizontal: false, vertical: true)
+                    // Answers get read aloud or pasted; selection is the cheapest
+                    // way to let someone grab a phrase mid-call.
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
             }
         }
     }

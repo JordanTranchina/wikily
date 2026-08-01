@@ -51,6 +51,14 @@ final class CallSession {
     /// The wiki folder currently indexed, if one has been chosen.
     private(set) var wikiFolderPath: String?
 
+    /// The Q&A thread on the card. Kept as its own object because a question and
+    /// its answer live for seconds while the call runs for an hour.
+    let askSession = AskSession()
+
+    /// Which model answers questions. Defaults to Apple's on-device model, which
+    /// needs no setup; Settings can swap in a local server.
+    var modelService: any LanguageModelService = AppleFoundationModelService()
+
     // MARK: - Configuration
 
     static let transcriptLimit = 40
@@ -241,6 +249,31 @@ final class CallSession {
     }
 
     /// Clear the current suggestion and suppress that page until the topic moves.
+    // MARK: - Asking
+
+    /// Send whatever is in the ask field.
+    ///
+    /// These wrappers exist so the view never has to assemble grounding context
+    /// itself. The page and transcript are what make an answer trustworthy, and
+    /// forgetting either at one call site would be silent — the model would
+    /// happily answer without them.
+    func submitAsk() {
+        askSession.sendDraft(
+            page: currentMatch?.document,
+            transcript: transcript,
+            service: modelService
+        )
+    }
+
+    func run(_ action: QuickAction) {
+        askSession.run(
+            action,
+            page: currentMatch?.document,
+            transcript: transcript,
+            service: modelService
+        )
+    }
+
     func dismissCurrentMatch() {
         guard let currentMatch else { return }
         coordinator.dismiss(documentID: currentMatch.document.id)

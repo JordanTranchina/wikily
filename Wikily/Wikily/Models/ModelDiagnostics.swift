@@ -12,9 +12,19 @@ import Foundation
 enum ModelDiagnostics {
 
     static let argument = "--probe-models"
+    static let askArgument = "--probe-ask"
 
     static func isRequested(_ arguments: [String] = CommandLine.arguments) -> Bool {
         arguments.contains(argument)
+    }
+
+    /// `--probe-ask <vault>` — exercise the grounded Q&A prompt against a real
+    /// model and a real wiki page.
+    static func askVaultPath(from arguments: [String] = CommandLine.arguments) -> String? {
+        guard let index = arguments.firstIndex(of: askArgument),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return (arguments[index + 1] as NSString).expandingTildeInPath
     }
 
     static func run() async {
@@ -27,6 +37,95 @@ enum ModelDiagnostics {
         await probeApple()
         await probeLocalServers()
         print("")
+    }
+
+    // MARK: - Grounded Q&A
+
+    /// Ask real questions of a real page through a real model.
+    ///
+    /// `GroundedPromptTests` asserts the prompt *says* the right things. Whether
+    /// a small on-device model actually obeys "answer only from this page, and
+    /// say so when it can't" is a different claim, and the only way to check it
+    /// is to ask. The third question below is the one that matters: it has no
+    /// answer in the page, and a model that invents one would be dangerous here,
+    /// because the user reads these answers aloud to a customer.
+    static func probeAsk(vaultPath: String) async {
+        print("""
+
+        Wikily grounded Q&A probe
+        ─────────────────────────
+        """)
+
+        let service = AppleFoundationModelService()
+        let availability = await service.availability()
+        guard availability.isAvailable else {
+            print("\nApple on-device model unavailable: \(availability.message ?? "no reason")\n")
+            return
+        }
+
+        let page: WikiDocument
+        do {
+            let scan = try WikiScanner.scan(directory: vaultPath)
+            let documents = scan.files.map(MarkdownParser.parse)
+            guard let becky = documents.first(where: { $0.title.contains("Becky") })
+                ?? documents.first
+            else {
+                print("\nNo pages in \(vaultPath)\n")
+                return
+            }
+            page = becky
+        } catch {
+            print("\nCould not read vault: \(error.localizedDescription)\n")
+            return
+        }
+
+        let transcript = [
+            TranscriptSegment(
+                text: "Hey, quick question — where did we land on the Becky promotion?",
+                source: .system,
+                startTime: 0
+            ),
+            TranscriptSegment(text: "Let me pull that up.", source: .microphone, startTime: 5),
+        ]
+
+        print("\nPage: \(page.title)")
+        print("Status on page: \(page.status ?? "none")\n")
+
+        let questions: [(label: String, question: String)] = [
+            ("answerable from the page", "What's the current status?"),
+            ("needs the call context", QuickAction.whatToSay.prompt),
+            // Deliberately unanswerable. The page says nothing about pricing.
+            ("NOT in the page", "What discount percentage did we agree for this campaign?"),
+        ]
+
+        for (label, question) in questions {
+            let prompt = GroundedPrompt.build(
+                question: question,
+                page: page,
+                transcript: transcript
+            )
+            print("Q (\(label)): \(question)")
+
+            var answer = ""
+            do {
+                for try await delta in service.stream(
+                    prompt: prompt.user,
+                    systemPrompt: prompt.system
+                ) {
+                    answer += delta
+                }
+            } catch {
+                print("  FAILED: \(error.localizedDescription)\n")
+                continue
+            }
+            print("A: \(answer.trimmingCharacters(in: .whitespacesAndNewlines))\n")
+        }
+
+        print("""
+        The third answer is the one to read carefully. If it states a discount
+        figure, the grounding is not holding and the system prompt needs work.
+
+        """)
     }
 
     // MARK: - Apple on-device
