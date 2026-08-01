@@ -68,7 +68,10 @@ final class CallSession {
     /// would latch on for the rest of the call.
     var speechActivityHold: Duration = .milliseconds(1200)
 
-    static let wikiFolderDefaultsKey = "wiki.folderPath"
+    /// Devices, mic capture and VAD tuning come from Settings. Injected rather
+    /// than read from `.shared` inside `startListening` so tests can drive a
+    /// session without touching the real defaults.
+    var captureConfiguration: CallCaptureSession.Configuration = .init()
 
     // MARK: - Internals
 
@@ -97,11 +100,15 @@ final class CallSession {
     ///
     /// The work happens off the main actor because a large vault takes long
     /// enough to drop frames, and this can be triggered mid-call.
+    /// Scan, parse and index a folder of markdown, then keep it as the live index.
+    ///
+    /// Persisting the choice is `AppSettings`' job, not this object's — writing
+    /// it from here is what let the test suite scribble on the real user's
+    /// preferences, since the test host is the app itself.
     func loadWiki(directory path: String) async {
         do {
             index = try await Self.buildIndex(directory: path)
             wikiFolderPath = path
-            UserDefaults.standard.set(path, forKey: Self.wikiFolderDefaultsKey)
             errorMessage = nil
             logger.info("Indexed \(self.index.documents.count, privacy: .public) wiki pages")
         } catch {
@@ -111,17 +118,16 @@ final class CallSession {
     }
 
     /// Re-index the folder chosen in a previous launch, if it is still there.
-    func restorePersistedWiki() async {
-        guard let path = UserDefaults.standard.string(forKey: Self.wikiFolderDefaultsKey) else {
-            return
-        }
+    func restorePersistedWiki(settings: AppSettings = .shared) async {
+        guard let path = settings.wikiFolderPath else { return }
         await loadWiki(directory: path)
     }
 
+    /// Uses the on-disk cache, so an unchanged vault re-indexes without
+    /// re-parsing every file — which matters because this runs on every launch.
     private static func buildIndex(directory: String) async throws -> WikiIndex {
         try await Task.detached(priority: .userInitiated) {
-            let scan = try WikiScanner.scan(directory: directory)
-            return WikiIndexBuilder.build(scan.files.map(MarkdownParser.parse))
+            try WikiIndexCache.buildIndex(directory: directory)
         }.value
     }
 
@@ -158,7 +164,7 @@ final class CallSession {
 
         let events: AsyncStream<CallCaptureSession.Event>
         do {
-            events = try await capture.start(configuration: .init())
+            events = try await capture.start(configuration: captureConfiguration)
             try await transcriber.start(sources: await capture.activeSources)
         } catch {
             await capture.stop()

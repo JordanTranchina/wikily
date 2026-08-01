@@ -10,12 +10,17 @@ struct WikilyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // A `Settings` scene is the only scene an accessory app needs to declare.
-        // The real settings UI lands in Phase 6.
-        Settings {
-            Text("Wikily")
-                .padding()
-        }
+        // Deliberately empty.
+        //
+        // A SwiftUI `Settings` scene does not work in this app: Wikily declares
+        // no renderable scene (the menu bar is an AppKit `NSStatusItem`, not a
+        // `MenuBarExtra`), so the scene graph never instantiates and
+        // `showSettingsWindow:` finds a target, returns true, and creates no
+        // window. Settings is hosted in an AppKit window instead — see
+        // `SettingsWindowController` — matching how the overlay and the
+        // onboarding wizard are already built.
+        //
+        // Everything is assembled in `AppDelegate.applicationDidFinishLaunching`.
     }
 }
 
@@ -73,7 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startInteractive() {
-        let session = CallSession()
+        // Settings seeds the session rather than the session reading `.shared`
+        // internally, so a session can be built in a test without touching the
+        // real user's preferences.
+        let settings = AppSettings.shared
+        let session = CallSession(coordinator: settings.matchCoordinator)
+        session.captureConfiguration = settings.captureConfiguration
+
         let overlay = OverlayWindowController(session: session) { [weak self] in
             Task { await self?.stopListening() }
         }
@@ -93,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        Task { await session.restorePersistedWiki() }
+        Task { await session.restorePersistedWiki(settings: settings) }
     }
 
     private func stopListening() async {

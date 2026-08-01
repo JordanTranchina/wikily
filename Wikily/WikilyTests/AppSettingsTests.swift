@@ -157,15 +157,32 @@ struct AppSettingsTests {
     /// `CallSession.restorePersistedWiki()` still reads the un-namespaced key.
     /// Until that call site moves, a folder chosen in Settings has to land there
     /// too or it is forgotten on relaunch.
-    @Test func writingTheWikiFolderMirrorsIntoTheLegacyKey() throws {
+    /// The mirror-on-write is gone: `CallSession` reads `AppSettings` now, so
+    /// there is nothing left to mirror *to*. Reading the legacy key **forward**
+    /// still matters — anyone who chose a folder before this change would
+    /// otherwise open an empty Knowledge Base tab and conclude it broke.
+    @Test func aLegacyWikiFolderIsMigratedForwardOnce() throws {
+        try withSettings(seed: [AppSettings.Key.legacyWikiFolderPath: "/tmp/legacy-vault"]) {
+            settings, defaults in
+            #expect(settings.wikiFolderPath == "/tmp/legacy-vault")
+            // Copied forward, not merely read, so the migration is idempotent.
+            #expect(defaults.string(forKey: AppSettings.Key.wikiFolderPath) == "/tmp/legacy-vault")
+        }
+    }
+
+    @Test func theCurrentKeyWinsOverALegacyOne() throws {
+        try withSettings(seed: [
+            AppSettings.Key.wikiFolderPath: "/tmp/current",
+            AppSettings.Key.legacyWikiFolderPath: "/tmp/legacy",
+        ]) { settings, _ in
+            #expect(settings.wikiFolderPath == "/tmp/current")
+        }
+    }
+
+    @Test func writingTheWikiFolderNoLongerTouchesTheLegacyKey() throws {
         try withSettings { settings, defaults in
             settings.wikiFolderPath = "/tmp/vault"
-            #expect(
-                defaults.string(forKey: AppSettings.Key.legacyWikiFolderPath) == "/tmp/vault"
-            )
-            #expect(
-                defaults.string(forKey: CallSession.wikiFolderDefaultsKey) == "/tmp/vault"
-            )
+            #expect(defaults.string(forKey: AppSettings.Key.legacyWikiFolderPath) == nil)
         }
     }
 

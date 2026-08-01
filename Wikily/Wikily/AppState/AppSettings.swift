@@ -96,13 +96,6 @@ final class AppSettings {
         didSet {
             guard !isRestoring, wikiFolderPath != oldValue else { return }
             defaults.set(wikiFolderPath, forKey: Key.wikiFolderPath)
-
-            // Mirrored into the Phase 4 key on purpose. `CallSession` still reads
-            // it in `restorePersistedWiki()`, and until that call site moves to
-            // `AppSettings` a folder chosen in Settings would otherwise be
-            // forgotten on the next launch. Delete both this line and
-            // `CallSession.wikiFolderDefaultsKey` in the same change.
-            defaults.set(wikiFolderPath, forKey: Key.legacyWikiFolderPath)
         }
     }
 
