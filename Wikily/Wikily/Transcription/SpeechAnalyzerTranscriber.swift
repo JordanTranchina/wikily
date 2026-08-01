@@ -43,8 +43,6 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
     private var converter: AVAudioConverter?
     private var captureFormat: AVAudioFormat?
 
-    private var elapsedSamples: Int = 0
-
     private let segmentStream: AsyncStream<TranscriptSegment>
     private let segmentContinuation: AsyncStream<TranscriptSegment>.Continuation
 
@@ -64,9 +62,10 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
         }
     }
 
-    init(locale: Locale, source: AudioChunk.Source) {
+    init(locale: Locale, source: AudioChunk.Source, verbose: Bool = false) {
         self.locale = locale
         self.source = source
+        self.verbose = verbose
         let (stream, continuation) = AsyncStream<TranscriptSegment>.makeStream()
         self.segmentStream = stream
         self.segmentContinuation = continuation
@@ -95,13 +94,24 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
         let (inputStream, inputContinuation) = AsyncStream<AnalyzerInput>.makeStream()
         self.inputContinuation = inputContinuation
 
+        // Start consuming results *before* the analyzer, and off the actor.
+        // Both matter: results delivered before anyone is iterating are lost,
+        // and running the loop on this actor would make it contend with feed().
+        let continuation = segmentContinuation
+        let source = self.source
+        let verbose = self.verbose
+        resultsTask = Task.detached {
+            await Self.consumeResults(
+                from: transcriber,
+                source: source,
+                into: continuation,
+                verbose: verbose
+            )
+        }
+
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         self.analyzer = analyzer
         try await analyzer.start(inputSequence: inputStream)
-
-        resultsTask = Task { [weak self] in
-            await self?.consumeResults(from: transcriber)
-        }
 
         logger.info("""
             Transcriber started for \(self.source.rawValue, privacy: .public) \
@@ -109,20 +119,47 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
             """)
     }
 
+    /// Instrumentation for the offline diagnostics; off in normal operation.
+    private let verbose: Bool
+    private var fedBuffers = 0
+
     func feed(_ chunk: AudioChunk) async {
-        guard let inputContinuation, let analyzerFormat else { return }
-        guard let buffer = converted(chunk, to: analyzerFormat) else { return }
+        guard let inputContinuation, let analyzerFormat else {
+            if verbose { print("    [debug] feed dropped: no continuation/format") }
+            return
+        }
+        guard let buffer = converted(chunk, to: analyzerFormat) else {
+            if verbose { print("    [debug] conversion returned nil") }
+            return
+        }
+        if verbose {
+            fedBuffers += 1
+            if fedBuffers <= 3 {
+                let inRMS = (chunk.samples.reduce(0) { $0 + $1 * $1 } / Float(chunk.samples.count))
+                    .squareRoot()
+                var outRMS = 0.0
+                if let int16 = buffer.int16ChannelData {
+                    let n = Int(buffer.frameLength)
+                    var sum = 0.0
+                    for i in 0..<n {
+                        let v = Double(int16[0][i]) / 32768
+                        sum += v * v
+                    }
+                    outRMS = (sum / Double(n)).squareRoot()
+                }
+                print("    [debug] fed buffer \(fedBuffers): in=\(chunk.samples.count) "
+                    + "rms=\(String(format: "%.4f", inRMS)) -> out=\(buffer.frameLength) "
+                    + "rms=\(String(format: "%.4f", outRMS)) @\(buffer.format.sampleRate)Hz")
+            }
+        }
 
-        // Timestamps come from a running sample count rather than wall-clock, so
-        // the two sources stay aligned to the audio timeline even if one of them
-        // is delivered late.
-        let startTime = CMTime(
-            value: CMTimeValue(elapsedSamples),
-            timescale: CMTimeScale(chunk.sampleRate)
-        )
-        elapsedSamples += chunk.samples.count
-
-        inputContinuation.yield(AnalyzerInput(buffer: buffer, bufferStartTime: startTime))
+        // No `bufferStartTime`. Supplying one derived from the capture sample
+        // rate, while the buffer itself has been resampled to the analyzer's
+        // rate, makes SpeechAnalyzer discard every input — silently, with no
+        // error and an empty transcript. Letting it infer timing from the
+        // buffer sequence is both correct and simpler. Segment times then come
+        // from `result.range`, relative to when this transcriber started.
+        inputContinuation.yield(AnalyzerInput(buffer: buffer))
     }
 
     func finish() async {
@@ -133,8 +170,12 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
         // sentence of the call.
         try? await analyzer?.finalizeAndFinishThroughEndOfInput()
 
-        resultsTask?.cancel()
+        // Await the results task rather than cancelling it. Finalising is what
+        // *produces* the last results; cancelling here threw them away, which
+        // silently emptied the transcript.
+        await resultsTask?.value
         resultsTask = nil
+
         analyzer = nil
         transcriber = nil
         converter = nil
@@ -144,12 +185,23 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
 
     // MARK: - Internals
 
-    private func consumeResults(from transcriber: SpeechTranscriber) async {
+    /// Drain the transcriber's results into the segment stream.
+    ///
+    /// `static` and off-actor deliberately — see the note in `start()`.
+    private static func consumeResults(
+        from transcriber: SpeechTranscriber,
+        source: AudioChunk.Source,
+        into continuation: AsyncStream<TranscriptSegment>.Continuation,
+        verbose: Bool
+    ) async {
         do {
             for try await result in transcriber.results {
                 let text = String(result.text.characters).trimmed
+                if verbose {
+                    print("    [debug] result: \"\(text)\" @\(result.range.start.seconds)")
+                }
                 guard !text.isEmpty else { continue }
-                segmentContinuation.yield(
+                continuation.yield(
                     TranscriptSegment(
                         text: text,
                         source: source,
@@ -158,9 +210,9 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
                 )
             }
         } catch {
-            logger.error("Transcription stream failed: \(error.localizedDescription, privacy: .public)")
+            Logger(subsystem: "com.wikily.Wikily", category: "SpeechAnalyzerTranscriber")
+                .error("Transcription stream failed: \(error.localizedDescription, privacy: .public)")
         }
-        segmentContinuation.finish()
     }
 
     /// Convert a captured chunk into the analyzer's preferred format.

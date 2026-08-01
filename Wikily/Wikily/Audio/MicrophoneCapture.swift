@@ -36,8 +36,10 @@ final class MicrophoneCapture: @unchecked Sendable {
             throw CaptureError.microphoneUnavailable
         }
 
+        // Unbounded — see the note in SystemAudioTap. Dropping interior audio
+        // corrupts the transcript rather than merely delaying it.
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream(
-            bufferingPolicy: .bufferingNewest(64)
+            bufferingPolicy: .unbounded
         )
 
         let sampleRate = format.sampleRate

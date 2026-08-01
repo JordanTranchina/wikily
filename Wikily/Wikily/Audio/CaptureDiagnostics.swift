@@ -15,6 +15,7 @@ enum CaptureDiagnostics {
     static let probeArgument = "--probe-audio"
     static let speechProbeArgument = "--probe-speech"
     static let installArgument = "--install-speech-model"
+    static let transcribeArgument = "--transcribe"
 
     static func isProbeRequested(_ arguments: [String] = CommandLine.arguments) -> Bool {
         arguments.contains(probeArgument)
@@ -26,6 +27,15 @@ enum CaptureDiagnostics {
 
     static func isModelInstallRequested(_ arguments: [String] = CommandLine.arguments) -> Bool {
         arguments.contains(installArgument)
+    }
+
+    /// Path passed to `--transcribe`, which re-transcribes an existing WAV or a
+    /// directory of them.
+    static func transcribePath(from arguments: [String] = CommandLine.arguments) -> String? {
+        guard let index = arguments.firstIndex(of: transcribeArgument),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return arguments[index + 1]
     }
 
     /// Parse the launch arguments. Returns the requested duration, or `nil` when
@@ -171,6 +181,68 @@ enum CaptureDiagnostics {
         }
     }
 
+    // MARK: - Offline transcription
+
+    /// Re-transcribe an existing WAV, or every WAV in a directory. **Read-only.**
+    ///
+    /// Closes the loop on a `--capture-diagnostics` run: with the saved audio and
+    /// knowledge of what was actually said, transcription accuracy becomes a
+    /// check rather than an impression.
+    static func transcribeFiles(at path: String) async {
+        print("""
+
+        Wikily offline transcription
+        ────────────────────────────
+        """)
+
+        guard let locale = await SpeechModelInstaller.resolvedLocale(),
+              await SpeechModelInstaller.state(for: locale).isReady
+        else {
+            print("\nNo speech model installed. Run \(installArgument) first.\n")
+            return
+        }
+
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            print("\nNo such file or directory: \(url.path)\n")
+            return
+        }
+
+        let files: [URL]
+        if isDirectory.boolValue {
+            files = ((try? FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil
+            )) ?? [])
+                .filter { $0.pathExtension.lowercased() == "wav" }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        } else {
+            files = [url]
+        }
+
+        guard !files.isEmpty else {
+            print("\nNo .wav files found in \(url.path)\n")
+            return
+        }
+
+        print("Locale: \(locale.identifier)\n")
+        for file in files {
+            do {
+                let text = try await AudioFileTranscriber.transcribe(
+                    url: file,
+                    locale: locale,
+                    verbose: ProcessInfo.processInfo.environment["WIKILY_DEBUG"] != nil
+                )
+                print("  \(file.lastPathComponent)")
+                print("    \(text.isEmpty ? "(no speech recognised)" : text)\n")
+            } catch {
+                print("  \(file.lastPathComponent)")
+                print("    failed: \(error.localizedDescription)\n")
+            }
+        }
+    }
+
     // MARK: - Recording diagnostics
 
     /// Capture for a fixed window, transcribe on-device, and write one WAV per
@@ -221,16 +293,17 @@ enum CaptureDiagnostics {
 
         // Transcription is best-effort here: the WAV dump is still worth having
         // even if no model is installed.
-        let (transcriber, transcriptTask) = await startTranscriber(
-            sources: await session.activeSources
-        )
+        let sources = await session.activeSources
+        let (transcriber, transcriptTask) = await startTranscriber(sources: sources)
 
         let collector = Task {
             var index = 0
             var totalDuration = 0.0
+            var capturedAudioSeconds = 0.0
             for await event in events {
                 switch event {
                 case .audio(let chunk):
+                    capturedAudioSeconds += chunk.duration
                     await transcriber?.feed(chunk)
 
                 case .speechStarted:
@@ -259,7 +332,7 @@ enum CaptureDiagnostics {
                     }
                 }
             }
-            return (count: index, duration: totalDuration)
+            return (count: index, duration: totalDuration, captured: capturedAudioSeconds)
         }
 
         try? await Task.sleep(for: .seconds(seconds))
@@ -272,11 +345,30 @@ enum CaptureDiagnostics {
         transcriptTask?.cancel()
         let result = await collector.value
 
+        // Continuity check. The tap runs continuously, so the audio actually
+        // received should track wall-clock time across all active sources. A
+        // ratio well under 1.0 means audio is being dropped somewhere in the
+        // pipeline, which corrupts transcription into fragments — exactly the
+        // bug an over-eager AsyncStream buffering policy caused here once.
+        let sourceCount = max(sources.count, 1)
+        let expected = Double(seconds) * Double(sourceCount)
+        let continuity = expected > 0 ? result.captured / expected : 0
+
         print("""
 
         ──────────────────────────
         \(result.count) utterance(s), \(String(format: "%.1f", result.duration))s of speech.
+        Audio continuity: \(String(format: "%.0f%%", continuity * 100)) \
+        (\(String(format: "%.1f", result.captured))s received over \(seconds)s \
+        × \(sourceCount) source(s))
         """)
+        if continuity < 0.9 {
+            print("""
+
+            WARNING: audio is being dropped. Transcription will come out as
+            fragments. Check the AsyncStream buffering policies in the capture path.
+            """)
+        }
         if result.count == 0 {
             print("""
 

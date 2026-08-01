@@ -78,11 +78,15 @@ final class SystemAudioTap: @unchecked Sendable {
 
         try createAggregateDevice(outputUID: outputUID, tapUID: tapUID)
 
-        // Dropping the oldest buffer under backpressure is the right trade for
-        // live transcription: a late buffer is worth less than a current one,
-        // and blocking here would stall CoreAudio's realtime thread.
+        // Unbounded, deliberately. An earlier version used
+        // `.bufferingNewest(64)` on the theory that a late buffer is worth less
+        // than a current one. That is wrong for transcription: dropping interior
+        // audio doesn't delay the transcript, it *corrupts* it — the recogniser
+        // receives speech with holes punched through it and returns fragments.
+        // Buffering costs ~192 KB per second of backlog, which is a trivial
+        // price next to losing half a sentence.
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream(
-            bufferingPolicy: .bufferingNewest(64)
+            bufferingPolicy: .unbounded
         )
 
         let sampleRate = format.sampleRate

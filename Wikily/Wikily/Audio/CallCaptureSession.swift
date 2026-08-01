@@ -88,8 +88,11 @@ actor CallCaptureSession {
             }
         }
 
+        // Unbounded — see the note in SystemAudioTap. This stream carries the
+        // raw audio the transcriber consumes, so a dropped element is lost
+        // speech, not just a late frame.
         let (stream, continuation) = AsyncStream<Event>.makeStream(
-            bufferingPolicy: .bufferingNewest(256)
+            bufferingPolicy: .unbounded
         )
         self.continuation = continuation
         isRunning = true
