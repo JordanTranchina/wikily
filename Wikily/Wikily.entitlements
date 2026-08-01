@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Wikily is not sandboxed, matching the posture of the Tauri build it replaces.
+	  It reads a user-chosen wiki folder from arbitrary paths, creates a CoreAudio
+	  aggregate device for the system-audio tap, and registers global hotkeys.
+	  Hardened Runtime is on (see ENABLE_HARDENED_RUNTIME) for notarization.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+
+	<!-- CoreAudio process tap + microphone capture. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+
+	<!--
+	  Localhost only: talking to a user-run OpenAI-compatible model server
+	  (Ollama :11434, LM Studio :1234, llama-server :8080). No remote hosts.
+	-->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

@@ -15,6 +15,15 @@ dist-ssr
 # Test coverage
 coverage
 
+# Xcode (native rewrite)
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+.swiftpm/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
