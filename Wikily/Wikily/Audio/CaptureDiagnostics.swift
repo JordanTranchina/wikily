@@ -227,20 +227,76 @@ enum CaptureDiagnostics {
         }
 
         print("Locale: \(locale.identifier)\n")
+
+        // With a vault, run each transcript through the real matcher too. That
+        // turns this from "did transcription work?" into an end-to-end check of
+        // the actual product behaviour: does real speech surface the right page?
+        let vaultPath = vaultPath()
+        var coordinator = WikiMatchCoordinator()
+        var index: WikiIndex?
+        if let vaultPath {
+            do {
+                let scan = try WikiScanner.scan(directory: vaultPath)
+                index = WikiIndexBuilder.build(scan.files.map(MarkdownParser.parse))
+                print("Vault: \(vaultPath) (\(scan.files.count) pages)")
+                print("Threshold: \(coordinator.threshold)\n")
+            } catch {
+                print("Vault could not be scanned: \(error.localizedDescription)\n")
+            }
+        }
+
+        var clock = Date(timeIntervalSince1970: 0)
         for file in files {
             do {
                 let text = try await AudioFileTranscriber.transcribe(
                     url: file,
                     locale: locale,
+                    contextualStrings: index?.recognitionVocabulary() ?? [],
                     verbose: ProcessInfo.processInfo.environment["WIKILY_DEBUG"] != nil
                 )
                 print("  \(file.lastPathComponent)")
-                print("    \(text.isEmpty ? "(no speech recognised)" : text)\n")
+                print("    \(text.isEmpty ? "(no speech recognised)" : text)")
+
+                if let index {
+                    // Advance the clock past the debounce interval so each
+                    // utterance is judged on its own merits here.
+                    clock = clock.addingTimeInterval(10)
+                    if let match = coordinator.ingest(utterance: text, index: index, now: clock) {
+                        let percent = Int((match.score * 100).rounded())
+                        print("    → \(match.document.title)  (\(percent)%)")
+                        if !match.matchedEntities.isEmpty {
+                            print("      matched: \(match.matchedEntities.joined(separator: ", "))")
+                        }
+                    } else {
+                        print("    → no suggestion")
+                    }
+                    // Also score this utterance on its own. When the windowed
+                    // decision and the standalone ranking disagree, the cause is
+                    // the sliding window or a suppression rule, not the matcher.
+                    let standalone = WikiMatcher.match(
+                        index: index,
+                        transcript: text,
+                        options: .init(topK: 3)
+                    )
+                    let ranked = standalone
+                        .map { "\($0.document.title) \(Int(($0.score * 100).rounded()))%" }
+                        .joined(separator: ", ")
+                    print("      standalone: \(ranked.isEmpty ? "nothing" : ranked)")
+                }
+                print("")
             } catch {
                 print("  \(file.lastPathComponent)")
                 print("    failed: \(error.localizedDescription)\n")
             }
         }
+    }
+
+    /// Optional `--vault <path>` for the transcription diagnostics.
+    static func vaultPath(from arguments: [String] = CommandLine.arguments) -> String? {
+        guard let index = arguments.firstIndex(of: "--vault"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return (arguments[index + 1] as NSString).expandingTildeInPath
     }
 
     // MARK: - Recording diagnostics

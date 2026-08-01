@@ -44,10 +44,19 @@ enum AudioFileTranscriber {
     }
 
     /// Transcribe a file and return the recognised text.
-    static func transcribe(url: URL, locale: Locale, verbose: Bool = false) async throws -> String {
+    ///
+    /// `contextualStrings` biases recognition toward the user's own vocabulary;
+    /// pass `index.recognitionVocabulary()` when a vault is available.
+    static func transcribe(
+        url: URL,
+        locale: Locale,
+        contextualStrings: [String] = [],
+        verbose: Bool = false
+    ) async throws -> String {
         let transcriber = SpeechAnalyzerTranscriber(
             locale: locale,
             source: .system,
+            contextualStrings: contextualStrings,
             verbose: verbose
         )
         try await transcriber.start()

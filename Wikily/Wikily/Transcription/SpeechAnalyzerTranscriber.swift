@@ -62,9 +62,18 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
         }
     }
 
-    init(locale: Locale, source: AudioChunk.Source, verbose: Bool = false) {
+    /// Domain vocabulary to bias recognition toward — see `start()`.
+    private let contextualStrings: [String]
+
+    init(
+        locale: Locale,
+        source: AudioChunk.Source,
+        contextualStrings: [String] = [],
+        verbose: Bool = false
+    ) {
         self.locale = locale
         self.source = source
+        self.contextualStrings = contextualStrings
         self.verbose = verbose
         let (stream, continuation) = AsyncStream<TranscriptSegment>.makeStream()
         self.segmentStream = stream
@@ -111,6 +120,22 @@ actor SpeechAnalyzerTranscriber: TranscriptionService {
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         self.analyzer = analyzer
+
+        // Bias recognition toward the user's own vocabulary — page titles,
+        // aliases and tags are exactly the jargon a general model gets wrong,
+        // and they already sit in the index, so supplying them costs nothing.
+        //
+        // Measured honestly: this did *not* fix the one mis-recognition seen so
+        // far ("OAuth" heard as "OOS" survives it). It is kept because the API
+        // exists for precisely this purpose and the cost is a dictionary
+        // assignment, not because it is proven to help. What actually rescued
+        // that utterance was the matcher scoring 94% on the surrounding words.
+        if !contextualStrings.isEmpty {
+            let context = AnalysisContext()
+            context.contextualStrings = [.general: contextualStrings]
+            try await analyzer.setContext(context)
+        }
+
         try await analyzer.start(inputSequence: inputStream)
 
         logger.info("""

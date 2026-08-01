@@ -111,28 +111,65 @@ struct WikiMatchCoordinator: Sendable {
             window.removeFirst(window.count - size)
         }
 
-        let windowText = window.joined(separator: " ")
-        guard let top = WikiMatcher.match(index: index, transcript: windowText).first,
-              top.score >= threshold
-        else { return nil }
+        // What is being discussed *right now* wins. Scoring the whole window
+        // first was wrong on real calls: a strong entity hit early in a
+        // conversation ("the Becky promotion") keeps its boost for as long as it
+        // stays in the window, so it outranks whatever the caller has moved on
+        // to. The window is still needed for a topic split across utterances
+        // ("any update on the" / "Becky promotion"), so it remains the fallback.
+        var candidates = qualifying(WikiMatcher.match(
+            index: index,
+            transcript: utterance,
+            options: .init(topK: candidateDepth)
+        ))
+        if candidates.isEmpty {
+            candidates = qualifying(WikiMatcher.match(
+                index: index,
+                transcript: window.joined(separator: " "),
+                options: .init(topK: candidateDepth)
+            ))
+        }
+        guard !candidates.isEmpty else { return nil }
 
-        // A card the user just dismissed stays suppressed until a *different*
-        // document matches — dismissing means "not this, right now".
-        if top.document.id == dismissedDocumentID { return nil }
-        dismissedDocumentID = nil
-
+        // Rate limit applies to the overlay as a whole: below this interval the
+        // card visibly flickers between suggestions.
         if let lastSurfacedAt, now.timeIntervalSince(lastSurfacedAt) < minimumInterval {
             return nil
         }
-        if top.document.id == lastSurfacedDocumentID,
-           let lastSurfacedAt,
-           now.timeIntervalSince(lastSurfacedAt) < repeatCooldown {
-            return nil
+
+        // Walk the ranked candidates rather than considering only the top one.
+        // Returning nil when the best match happens to be suppressed made the
+        // overlay go deaf: after surfacing one page, every other topic raised in
+        // the next 45 seconds was silently discarded along with it.
+        for candidate in candidates {
+            // A card the user just dismissed stays suppressed — dismissing means
+            // "not this, right now".
+            if candidate.document.id == dismissedDocumentID { continue }
+
+            // The card stays on screen until dismissed, so re-surfacing the same
+            // page is invisible churn.
+            if candidate.document.id == lastSurfacedDocumentID,
+               let lastSurfacedAt,
+               now.timeIntervalSince(lastSurfacedAt) < repeatCooldown {
+                continue
+            }
+
+            // Moving to a different page means the topic moved on, which retires
+            // the earlier dismissal.
+            dismissedDocumentID = nil
+            lastSurfacedAt = now
+            lastSurfacedDocumentID = candidate.document.id
+            return candidate
         }
 
-        lastSurfacedAt = now
-        lastSurfacedDocumentID = top.document.id
-        return top
+        return nil
+    }
+
+    /// How far down the ranking to look for an unsuppressed candidate.
+    private var candidateDepth: Int { 5 }
+
+    private func qualifying(_ matches: [WikiMatch]) -> [WikiMatch] {
+        matches.filter { $0.score >= threshold }
     }
 
     /// Suppress the given document until something else matches.

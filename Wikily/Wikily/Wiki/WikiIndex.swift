@@ -25,6 +25,36 @@ struct WikiIndex: Sendable {
         entityMap: [:],
         stats: Stats(documentCount: 0, tokenCount: 0)
     )
+
+    /// Domain vocabulary to bias speech recognition toward.
+    ///
+    /// Page titles, aliases and tags are precisely the jargon a general-purpose
+    /// recogniser mishears — a real recording turned "OAuth" into "OOS". They
+    /// are already indexed as entities, so handing them to `SpeechAnalyzer`
+    /// costs nothing and improves exactly the words that decide a match.
+    ///
+    /// Capped because the list is a hint, not a dictionary; an unbounded vault
+    /// would otherwise dilute the bias into uselessness.
+    func recognitionVocabulary(limit: Int = 400) -> [String] {
+        var seen = Set<String>()
+        var vocabulary: [String] = []
+
+        func add(_ phrase: String) {
+            let trimmed = phrase.trimmed
+            // Single short tokens are either already common words or too
+            // ambiguous to bias usefully.
+            guard trimmed.count >= 3, seen.insert(trimmed.lowercased()).inserted else { return }
+            vocabulary.append(trimmed)
+        }
+
+        for document in documents {
+            add(document.title)
+            document.aliases.forEach(add)
+            document.tags.forEach(add)
+            if vocabulary.count >= limit { break }
+        }
+        return Array(vocabulary.prefix(limit))
+    }
 }
 
 /// Builds the local TF-IDF index.

@@ -13,6 +13,8 @@ actor LiveTranscriber {
     private let logger = Logger(subsystem: "com.wikily.Wikily", category: "LiveTranscriber")
 
     private let locale: Locale
+    /// Wiki vocabulary fed to the recogniser so it gets the user's jargon right.
+    private let contextualStrings: [String]
     private var transcribers: [AudioChunk.Source: SpeechAnalyzerTranscriber] = [:]
     private var forwardingTasks: [Task<Void, Never>] = []
 
@@ -22,8 +24,9 @@ actor LiveTranscriber {
     /// Merged, speaker-attributed transcript segments.
     nonisolated let segments: AsyncStream<TranscriptSegment>
 
-    init(locale: Locale) {
+    init(locale: Locale, contextualStrings: [String] = []) {
         self.locale = locale
+        self.contextualStrings = contextualStrings
         let (stream, continuation) = AsyncStream<TranscriptSegment>.makeStream()
         self.segmentStream = stream
         self.segmentContinuation = continuation
@@ -33,7 +36,11 @@ actor LiveTranscriber {
     /// Start a transcriber for each source that will actually be captured.
     func start(sources: [AudioChunk.Source]) async throws {
         for source in sources {
-            let transcriber = SpeechAnalyzerTranscriber(locale: locale, source: source)
+            let transcriber = SpeechAnalyzerTranscriber(
+                locale: locale,
+                source: source,
+                contextualStrings: contextualStrings
+            )
             try await transcriber.start()
             transcribers[source] = transcriber
 
