@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             diagnostic = { await CaptureDiagnostics.probeSpeech() }
         case CaptureDiagnostics.isModelInstallRequested():
             diagnostic = { await CaptureDiagnostics.installSpeechModel() }
+        case ModelDiagnostics.isRequested():
+            diagnostic = { await ModelDiagnostics.run() }
         case CaptureDiagnostics.transcribePath() != nil:
             let path = CaptureDiagnostics.transcribePath()!
             diagnostic = { await CaptureDiagnostics.transcribeFiles(at: path) }
