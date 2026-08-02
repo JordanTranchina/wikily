@@ -1,0 +1,91 @@
+# Native rewrite: merge readiness and next steps
+
+Status as of **2026-08-02**, `native-rewrite` branch. Written down so a future
+session (or a future you) can pick this up without re-deriving it.
+
+## Where things stand
+
+- Phases 0–6 done: wiki engine, CoreAudio capture, on-device speech, the
+  overlay HUD, model services, settings/onboarding/persistence, Ask Wikily.
+  242 tests passing across 23 suites (`xcodebuild test`).
+- This session: full AppKit menu bar with Quit in both the app menu and the
+  Window menu, a fix for a real SwiftUI/AppKit bug that silently stripped the
+  main menu down to nothing when the overlay's text field took focus,
+  most-recent-build-wins process handling in Debug, a user-adjustable overlay
+  text size setting, and Settings opening automatically on launch.
+- CI: added a `swift` job to `.github/workflows/ci.yml` (builds + runs the
+  full test suite on `macos-latest`) and paused `.github/workflows/publish.yml`
+  (was auto-publishing a release of the **old Tauri app** on every push to
+  `master` — now `workflow_dispatch` only, so merging this branch can't
+  accidentally trigger it). Neither has actually run in GitHub Actions yet —
+  see "Verify CI actually works" below.
+
+## Not ready to merge into `master` yet
+
+The core reason: **`native-rewrite` is purely additive.** `git diff
+master...native-rewrite` is 14,000+ insertions and zero deletions — the old
+Tauri/TypeScript app (`src/`, `src-tauri/`, `package.json`, `dist/`, ...) is
+still fully intact and untouched in this branch. Merging today wouldn't
+complete the rewrite, it would just add a second app living next to the
+first one.
+
+## Next steps, roughly in order
+
+1. **Verify CI actually works.** The `swift` job in `ci.yml` has never run in
+   GitHub Actions — it was only exercised locally (`xcodebuild build`/`test`
+   against Xcode 26.6, macOS 26.0 deployment target). Push a commit (or open
+   a PR) and watch it. The most likely failure mode is Xcode-version mismatch
+   on the runner image — the job comment explains how to pin one with
+   `maxim-lobanov/setup-xcode`'s `xcode-version:` input if `latest-stable`
+   doesn't resolve a usable SDK/destination.
+
+2. **Do the hands-on verification pass.** These are real product-behavior
+   questions, not something more unit tests would catch:
+   - Overlay behavior against a real full-screen Zoom call, and following the
+     user across Spaces/desktops — asserted as window flags in
+     `OverlayPanelTests`, never watched live.
+   - The local-server model backend (Ollama/LM Studio) against an actual
+     running server — `--probe-models` exercises the wire format, but nobody
+     has pointed it at a real server and read a real response.
+   - The wireframe-fidelity HUD restyle (this session and the one before) —
+     never compared side-by-side against the Claude Design mockup, only
+     checked via `--overlay-preview` screenshots.
+
+3. **Look at the two build warnings** (clean build, not currently blocking):
+   - `Wikily/Wikily/Audio/CoreAudioSupport.swift:90` — forming an
+     `UnsafeMutableRawPointer` to a Swift array that may hold object
+     references. Worth understanding, not just silencing — could be a real
+     memory-safety issue.
+   - `Wikily/Wikily/Overlay/OverlayView.swift:224` — deprecated `Text` `+`
+     concatenation (macOS 26 wants string interpolation instead). Cosmetic.
+
+4. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
+   `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
+   `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, `components.json`,
+   `.npmrc`, `.vscode/` if Tauri-specific. Cross-check `.gitignore` afterward
+   — several entries (`node_modules`, `dist`, `coverage`) exist only for the
+   Tauri app and can go too.
+
+5. **Update the stale docs.** `README.md`, `Product Spec Wikily.md`, and
+   `Tech Spec Wikily.md` all still describe the Tauri architecture.
+   `docs/LOCAL_TRANSCRIPTION.md` is Tauri-specific end to end (whisper.cpp
+   sidecar via a Rust command) and either needs a native rewrite of its own or
+   an explicit "superseded by X" note, depending on whether on-device
+   transcription still works the same way in the native app (it does, via
+   `SpeechAnalyzer` — this doc just doesn't say so yet).
+
+6. **Decide what replaces `publish.yml`.** It's paused, not replaced. The
+   native app needs its own release pipeline: `xcodebuild archive` +
+   codesign with a Developer ID + notarization + stapling, on a tag push.
+   There's a pinned note "macOS release signing setup" that suggests this was
+   already being tracked separately — check there before starting from
+   scratch.
+
+7. **Merge to `master`**, once 4–6 are done and 2 has had a real pass.
+
+## Two things flagged earlier, still undecided
+
+- `match_log` local engagement telemetry (original spec §7 relevance KPI) —
+  dropped when the SQLite layer went; would come back as a small local JSONL
+  file instead if wanted.
+- Nothing else outstanding from the Phase 6 notes.

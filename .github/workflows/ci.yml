@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - master
+      # The native macOS rewrite lives here until Phase 7 (Tauri deletion)
+      # lands — see docs/NATIVE_REWRITE_ROADMAP.md. Building it on every push
+      # is what CI is for; without this the branch could sit broken for days
+      # between the PRs that happen to trigger `pull_request`.
+      - native-rewrite
   pull_request:
 
 # Cancel superseded runs on the same ref to save CI minutes.
@@ -87,3 +92,30 @@ jobs:
 
       - name: Cargo check
         run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+
+  swift:
+    name: Swift (native rewrite — build, test)
+    # The project's MACOSX_DEPLOYMENT_TARGET is 26.0 and it was built against
+    # Xcode 26.6 locally; `latest-stable` below tracks whatever Xcode the
+    # runner image currently ships as its newest release. If this job starts
+    # failing to resolve a destination or to find the SDK, that mismatch —
+    # not the app — is almost certainly why; pin an explicit version with
+    # `maxim-lobanov/setup-xcode`'s `xcode-version:` input once one is known
+    # to work on `macos-latest`.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Wikily/Wikily.xcodeproj \
+            -scheme Wikily \
+            -destination 'platform=macOS' \
+            test

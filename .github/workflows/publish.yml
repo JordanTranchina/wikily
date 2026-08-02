@@ -1,9 +1,15 @@
 name: "publish"
 
+# Manual-only, deliberately: this pipeline builds and publishes a GitHub
+# Release of the Tauri app. It used to fire on every push to `master`, which
+# is exactly wrong once the native macOS rewrite (`native-rewrite` branch)
+# merges — every merge to `master` would auto-ship a release of the app
+# being replaced. Restored to `push: branches: [master]` only if the Tauri
+# app is still the one you want to publish; deleted outright once Phase 7
+# (Tauri deletion) lands and native packaging takes over. See
+# docs/NATIVE_REWRITE_ROADMAP.md.
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
   publish-tauri:
