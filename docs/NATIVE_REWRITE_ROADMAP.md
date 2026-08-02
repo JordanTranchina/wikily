@@ -69,13 +69,29 @@ first one.
    — several entries (`node_modules`, `dist`, `coverage`) exist only for the
    Tauri app and can go too.
 
-5. **Update the stale docs.** `README.md`, `Product Spec Wikily.md`, and
-   `Tech Spec Wikily.md` all still describe the Tauri architecture.
-   `docs/LOCAL_TRANSCRIPTION.md` is Tauri-specific end to end (whisper.cpp
-   sidecar via a Rust command) and either needs a native rewrite of its own or
-   an explicit "superseded by X" note, depending on whether on-device
-   transcription still works the same way in the native app (it does, via
-   `SpeechAnalyzer` — this doc just doesn't say so yet).
+5. ~~**Update the stale docs.**~~ Done.
+   - `README.md` — full rewrite. The old one wasn't even Wikily-specific: it
+     was still describing the upstream **Pluely** product (GPL v3 branding,
+     cross-platform Win/Linux, a license/monetization system, screenshot
+     capture, a chat Dashboard — none of which Wikily has), with one sentence
+     about Wikily awkwardly inserted. Now describes the actual native app,
+     how to build/test it, and flags the repo's mid-transition state plainly.
+   - `Tech Spec Wikily.md` — full rewrite. The old version specified an
+     entire Tauri/Rust/React/SQLite implementation, file paths and all, that
+     was never built. Replaced with the real architecture: component
+     diagram, module table, and file citations against what's actually in
+     `Wikily/Wikily/`.
+   - `Product Spec Wikily.md` — lighter touch, deliberately. The persona/
+     workflow/KPI/monetization thinking (§1, §2, §6–8) didn't change with the
+     tech stack, so it's untouched. Only the sections describing *how* it's
+     built (§1.3, §1.5, §3.1, §3.3, §4 — all the "Pluely fork" framing) got
+     inline "superseded, see top note" markers pointing at the Tech Spec,
+     rather than being rewritten in place — the Tech Spec is meant to be the
+     one current, authoritative build reference.
+   - `docs/LOCAL_TRANSCRIPTION.md` — full rewrite. The real story turned out
+     much simpler than the whisper.cpp-sidecar plan this doc detailed: Apple's
+     `Speech` framework downloads and manages its own on-device model, no
+     bundling/signing pipeline needed at all.
 
 6. **Decide what replaces `publish.yml`.** It's paused, not replaced. The
    native app needs its own release pipeline: `xcodebuild archive` +
