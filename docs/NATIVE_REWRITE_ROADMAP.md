@@ -14,12 +14,13 @@ session (or a future you) can pick this up without re-deriving it.
   most-recent-build-wins process handling in Debug, a user-adjustable overlay
   text size setting, and Settings opening automatically on launch.
 - CI: added a `swift` job to `.github/workflows/ci.yml` (builds + runs the
-  full test suite on `macos-latest`) and paused `.github/workflows/publish.yml`
-  (was auto-publishing a release of the **old Tauri app** on every push to
-  `master` — now `workflow_dispatch` only, so merging this branch can't
-  accidentally trigger it). Verified working in GitHub Actions —
+  full test suite on `macos-latest`). Verified working in GitHub Actions —
   [run #13](https://github.com/JordanTranchina/wikily/actions/runs/30764485999)
   passed, including the new `swift` job.
+- Sparkle auto-updates: built and verified locally (commit `d8bdff6`, **not
+  yet pushed to `origin`**) — see item 2 below for what's left. Replaces the
+  old `.github/workflows/publish.yml`, which used to auto-publish a release
+  of the **old Tauri app** on every push to `master`.
 
 ## Not ready to merge into `master` yet
 
@@ -32,29 +33,24 @@ first one.
 
 ## Next steps, roughly in order
 
-1. **Do the hands-on verification pass.** These are real product-behavior
-   questions, not something more unit tests would catch:
-   - Overlay behavior against a real full-screen Zoom call, and following the
-     user across Spaces/desktops — asserted as window flags in
-     `OverlayPanelTests`, never watched live.
-   - The local-server model backend (Ollama/LM Studio) against an actual
-     running server — `--probe-models` exercises the wire format, but nobody
-     has pointed it at a real server and read a real response.
-   - The wireframe-fidelity HUD restyle (this session and the one before) —
-     never compared side-by-side against the Claude Design mockup, only
-     checked via `--overlay-preview` screenshots.
+1. **Push the Sparkle commit, then prove the release pipeline actually
+   works end-to-end.** Sparkle auto-updates are built and locally verified
+   (see [`docs/RELEASING.md`](RELEASING.md) for the mechanics; the full
+   product/engineering reasoning for going with Sparkle + ad-hoc signing
+   instead of paying for Apple Developer Program enrollment is preserved
+   below) but nothing has touched `origin` yet:
+   - Push commit `d8bdff6` to `origin/native-rewrite`.
+   - Push a throwaway test tag (e.g. `v0.0.1-test`) and watch
+     `.github/workflows/release.yml` run — confirms the ad-hoc archive,
+     GitHub Release, and `appcast.xml` → `master` commit all actually work
+     in CI, not just locally.
+   - Cut the first real tagged release (e.g. `v0.1.0`), install it via the
+     README's right-click → Open flow, then cut a second release and confirm
+     the installed copy updates itself through Sparkle with **no** repeat
+     Gatekeeper warning — the specific claim the whole decision rests on.
 
-2. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
-   `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
-   `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, `components.json`,
-   `.npmrc`, `.vscode/` if Tauri-specific. Cross-check `.gitignore` afterward
-   — several entries (`node_modules`, `dist`, `coverage`) exist only for the
-   Tauri app and can go too.
-
-3. **Decided (2026-08-02), not yet built: replace `publish.yml` with a free
-   distribution path — no Apple Developer Program enrollment for now.**
-   Talked through as a product decision, not just an engineering one — full
-   reasoning below, since the "why" matters if this gets revisited.
+   <details>
+   <summary>Why Sparkle + ad-hoc signing instead of paying for notarization (decided 2026-08-02)</summary>
 
    - **Audience:** not just Jordan anymore — plan is to share a GitHub link
      with other people to download.
@@ -65,59 +61,47 @@ first one.
      that stops a downloaded app from triggering macOS's "Apple cannot
      verify this app is free of malware" Gatekeeper warning. There is no
      free workaround for that specific warning; it's an Apple platform rule,
-     not something to architect around. Decided it's not worth it yet.
-   - **What's still buildable for free, and what isn't:**
-     - ✅ **[Sparkle](https://sparkle-project.org/)** for the in-app
-       "Update available" check/download/install flow. Sparkle itself is
-       free/open-source and needs no Apple account — its own update
-       integrity check uses a separate, self-managed EdDSA key pair, not
-       Apple's notarization.
-     - ✅ **GitHub Releases** as the free hosting/distribution point —
-       ad-hoc/self-signed builds (`codesign --sign -`, what local Xcode runs
-       already use), no Developer ID needed to produce or host them. May
-       need Hardened Runtime's "Library Validation" turned off for an
-       ad-hoc-signed build to load Sparkle at all — a build setting, not a
-       fee.
-     - **The tradeoff is smaller than first written here — corrected
-       2026-08-02.** Originally this said every Sparkle-delivered update
-       would re-trigger the Gatekeeper warning. That's wrong. Gatekeeper's
-       warning is gated specifically on the `com.apple.quarantine` extended
-       attribute, which only quarantine-aware downloaders (browsers, Mail,
-       etc.) apply — and **Sparkle strips that attribute from the updates it
-       downloads and installs**, well-documented enough that it's a known
-       security consideration for update-channel compromise, not a fringe
-       claim (see sources below). Net effect: **only the first manual
-       download+install** (from GitHub Releases, via a browser) needs the
-       right-click → "Open" workaround. Every update after that, delivered
-       through Sparkle, installs and relaunches with no repeat warning —
-       the actual "smooth in-app update" experience that was wanted,
-       achievable without paying anything. The workaround still needs to be
-       real, visible instructions wherever the download link lives (it's
-       every *new* user's first-install experience, permanently, not a
-       one-time launch problem) — that part of the original reasoning
-       stands.
-       Sources: [Sparkle docs](https://sparkle-project.org/documentation/)
-       (EdDSA verification is independent of Apple code-signing; ad-hoc
-       signed apps can receive updates), and
-       [lapcatsoftware.com's notarization analysis](https://lapcatsoftware.com/articles/notarization.html)
-       (quarantine-stripping behavior and its security implications, corroborated by SpecterOps' write-up of it as a real attack vector).
-     - **Revisit paying the fee if:** the first-install Gatekeeper warning
-       becomes a real adoption blocker for new downloaders, or distribution
-       ever wants to move to TestFlight (internal testing without a public
-       link — cleaner for a small known group) or the Mac App Store — both
-       still require the same paid enrollment, so there's no cheaper tier
-       that unlocks just one of them.
-   - **Built (2026-08-02).** Sparkle is wired in (`WikilyApp.swift`,
-     `AppMainMenu.swift`'s "Check for Updates…" item, a Settings → General
-     toggle for automatic checks), `.github/workflows/release.yml` replaces
-     the deleted `publish.yml` (tag push → ad-hoc-signed archive → GitHub
-     Release → `appcast.xml` committed to `master`), and the README has a
-     Download section with the right-click → Open instructions. See
-     [`docs/RELEASING.md`](RELEASING.md) for how to actually cut a release —
-     not yet done: the first real tagged release, which is also the first
-     end-to-end proof this works.
+     not something to architect around.
+   - **[Sparkle](https://sparkle-project.org/)** is free/open-source and
+     needs no Apple account — its own update integrity check uses a
+     separate, self-managed EdDSA key pair, not Apple's notarization.
+     **GitHub Releases** is the free hosting point for ad-hoc/self-signed
+     builds.
+   - **Only the first manual download+install needs the right-click → "Open"
+     workaround.** Gatekeeper's warning is gated on the `com.apple.quarantine`
+     extended attribute, which only quarantine-aware downloaders (browsers,
+     Mail, etc.) apply — and Sparkle strips that attribute from the updates
+     it installs. Every update after the first, delivered through Sparkle,
+     installs with no repeat warning.
+     Sources: [Sparkle docs](https://sparkle-project.org/documentation/),
+     [lapcatsoftware.com's notarization analysis](https://lapcatsoftware.com/articles/notarization.html).
+   - **Revisit paying the fee if:** the first-install Gatekeeper warning
+     becomes a real adoption blocker for new downloaders, or distribution
+     ever wants to move to TestFlight or the Mac App Store — both still
+     require the same paid enrollment.
 
-4. **Merge to `master`**, once 2–3 are done and 1 has had a real pass.
+   </details>
+
+2. **Do the hands-on verification pass.** These are real product-behavior
+   questions, not something more unit tests would catch:
+   - Overlay behavior against a real full-screen Zoom call, and following the
+     user across Spaces/desktops — asserted as window flags in
+     `OverlayPanelTests`, never watched live.
+   - The local-server model backend (Ollama/LM Studio) against an actual
+     running server — `--probe-models` exercises the wire format, but nobody
+     has pointed it at a real server and read a real response.
+   - The wireframe-fidelity HUD restyle — never compared side-by-side
+     against the Claude Design mockup, only checked via `--overlay-preview`
+     screenshots.
+
+3. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
+   `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
+   `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, `components.json`,
+   `.npmrc`, `.vscode/` if Tauri-specific. Cross-check `.gitignore` afterward
+   — several entries (`node_modules`, `dist`, `coverage`) exist only for the
+   Tauri app and can go too.
+
+4. **Merge to `master`**, once 1–3 are done.
 
 ## Two things flagged earlier, still undecided
 
