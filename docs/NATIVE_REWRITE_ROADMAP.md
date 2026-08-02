@@ -93,12 +93,63 @@ first one.
      `Speech` framework downloads and manages its own on-device model, no
      bundling/signing pipeline needed at all.
 
-6. **Decide what replaces `publish.yml`.** It's paused, not replaced. The
-   native app needs its own release pipeline: `xcodebuild archive` +
-   codesign with a Developer ID + notarization + stapling, on a tag push.
-   There's a pinned note "macOS release signing setup" that suggests this was
-   already being tracked separately — check there before starting from
-   scratch.
+6. **Decided (2026-08-02), not yet built: replace `publish.yml` with a free
+   distribution path — no Apple Developer Program enrollment for now.**
+   Talked through as a product decision, not just an engineering one — full
+   reasoning below, since the "why" matters if this gets revisited.
+
+   - **Audience:** not just Jordan anymore — plan is to share a GitHub link
+     with other people to download.
+   - **Update experience wanted:** the app should notice a new version exists
+     and prompt in-app, not "check a webpage occasionally."
+   - **The $99/year Apple Developer Program fee is not being paid right
+     now.** That fee is specifically the price of *notarization* — the thing
+     that stops a downloaded app from triggering macOS's "Apple cannot
+     verify this app is free of malware" Gatekeeper warning. There is no
+     free workaround for that specific warning; it's an Apple platform rule,
+     not something to architect around. Decided it's not worth it yet.
+   - **What's still buildable for free, and what isn't:**
+     - ✅ **[Sparkle](https://sparkle-project.org/)** for the in-app
+       "Update available" check/download/install flow. Sparkle itself is
+       free/open-source and needs no Apple account — its own update
+       integrity check uses a separate, self-managed EdDSA key pair, not
+       Apple's notarization.
+     - ✅ **GitHub Releases** as the free hosting/distribution point —
+       ad-hoc/self-signed builds (`codesign --sign -`, what local Xcode runs
+       already use), no Developer ID needed to produce or host them.
+     - ⚠️ **The tradeoff this leaves in place:** every new version Sparkle
+       delivers is *still an unnotarized download* the first time its new
+       binary runs, so it **still triggers the Gatekeeper warning once per
+       update**, same as first install. Sparkle solves "does the app know
+       and offer to update," not "does macOS trust it." The mitigation is
+       procedural, not technical: document right-click → "Open" (which
+       surfaces an "Open Anyway" button in the dialog itself, rather than
+       sending someone into System Settings) prominently wherever the
+       download link lives — this needs to be real, visible instructions by
+       the time anyone outside Jordan is asked to download it, not a detail
+       left to word-of-mouth. Worth noting this workaround has been getting
+       quietly harder across recent macOS releases, so it's a mitigation,
+       not a permanent guarantee.
+     - **Revisit paying the fee if:** the Gatekeeper warning becomes a real
+       adoption blocker for new downloaders, or distribution ever wants to
+       move to TestFlight (internal testing without a public link — cleaner
+       for a small known group) or the Mac App Store — both still require
+       the same paid enrollment, so there's no cheaper tier that unlocks
+       just one of them.
+   - **Concrete build steps, not yet started:**
+     1. Add Sparkle as a Swift Package dependency to `Wikily.xcodeproj`.
+     2. Generate a Sparkle EdDSA key pair (one-time, free, self-managed —
+        `generate_keys` tool ships with Sparkle).
+     3. Wire Sparkle's update-checker into the app (menu item + automatic
+        background check) and add its required Info.plist keys
+        (`SUFeedURL`, `SUPublicEDKey`).
+     4. New GitHub Actions workflow (replacing the paused `publish.yml`):
+        on a version tag push, `xcodebuild archive` → export a `.app` →
+        zip/dmg it → generate/update the Sparkle `appcast.xml` → publish
+        both to a new GitHub Release.
+     5. Add clear, visible "first time opening this? Right-click → Open"
+        instructions to the README's download section and/or the release
+        notes template.
 
 7. **Merge to `master`**, once 4–6 are done and 2 has had a real pass.
 
