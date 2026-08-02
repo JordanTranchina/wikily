@@ -29,6 +29,10 @@ final class LocalServerModelService: LanguageModelService {
     private let baseURL: URL
     private let modelID: String
     private let temperature: Double?
+    /// Same reasoning and same value as `AppleFoundationModelService.maximumResponseTokens`
+    /// — a backend-requested ceiling on generation length, defense-in-depth
+    /// against a degenerate loop alongside `AskSession.maximumAnswerCharacters`.
+    private let maxTokens: Int?
     private let session: URLSession
 
     init(
@@ -36,11 +40,13 @@ final class LocalServerModelService: LanguageModelService {
         modelID: String,
         displayName: String? = nil,
         temperature: Double? = 0.3,
+        maxTokens: Int? = 400,
         session: URLSession? = nil
     ) {
         self.baseURL = baseURL
         self.modelID = modelID
         self.temperature = temperature
+        self.maxTokens = maxTokens
         self.session = session ?? Self.makeSession()
         self.descriptor = ModelDescriptor(
             backend: .localServer,
@@ -204,7 +210,8 @@ final class LocalServerModelService: LanguageModelService {
                 model: modelID,
                 messages: messages,
                 stream: true,
-                temperature: temperature
+                temperature: temperature,
+                maxTokens: maxTokens
             )
         )
         return request
@@ -235,6 +242,15 @@ struct ChatCompletionRequest: Codable, Sendable, Equatable {
     var messages: [ChatMessage]
     var stream: Bool
     var temperature: Double?
+
+    /// `snake_case` because this is the wire format, not Swift — every server
+    /// this client talks to expects `max_tokens` on the JSON body.
+    var maxTokens: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case model, messages, stream, temperature
+        case maxTokens = "max_tokens"
+    }
 }
 
 /// Path construction shared by the client and by discovery.

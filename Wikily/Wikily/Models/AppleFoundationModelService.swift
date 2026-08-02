@@ -26,9 +26,18 @@ final class AppleFoundationModelService: LanguageModelService {
 
     let descriptor = ModelDescriptor.appleFoundation
 
-    /// Caps the answer length. Left `nil` here because truncation is a product
-    /// decision, not a transport one — the HUD, which knows how much room a card
-    /// has, is the right place to set it.
+    /// Caps the answer length.
+    ///
+    /// Was `nil` — "truncation is a product decision, the HUD should set it" —
+    /// but nothing ever did, so the model had no ceiling at all. That surfaced
+    /// as a real bug: asked to recap a call with nothing transcribed yet, the
+    /// on-device model repeated an invented bullet point hundreds of times
+    /// rather than admitting there was nothing to recap, and kept generating
+    /// for as long as it was allowed to. 400 tokens is generous for a card
+    /// meant to hold a few sentences and cheap insurance against the next
+    /// prompt that trips the same failure mode. `AskSession.maximumAnswerCharacters`
+    /// is the second line of defense, independent of whether this backend
+    /// honours the request at all.
     private let maximumResponseTokens: Int?
 
     /// Low by default: this model's job is to summarise and answer from wiki
@@ -37,7 +46,7 @@ final class AppleFoundationModelService: LanguageModelService {
     /// want for grounded output.
     private let temperature: Double?
 
-    init(maximumResponseTokens: Int? = nil, temperature: Double? = 0.3) {
+    init(maximumResponseTokens: Int? = 400, temperature: Double? = 0.3) {
         self.maximumResponseTokens = maximumResponseTokens
         self.temperature = temperature
     }

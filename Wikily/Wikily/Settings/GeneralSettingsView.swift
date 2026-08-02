@@ -39,9 +39,9 @@ struct GeneralSettingsView: View {
                 Text("Startup")
             } footer: {
                 SettingsFootnote(
-                    "Wikily has no Dock icon. It runs from the menu bar, so starting "
-                        + "it at login is the difference between it being there when a "
-                        + "call starts and having to remember to launch it."
+                    "Wikily spends most of its time out of the way, in the menu bar. "
+                        + "Starting it at login is the difference between it being there "
+                        + "when a call starts and having to remember to launch it."
                 )
             }
 

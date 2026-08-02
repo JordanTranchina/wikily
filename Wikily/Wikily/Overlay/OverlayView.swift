@@ -6,17 +6,20 @@ import SwiftUI
 /// A native re-cut of `src/components/WikiCard/index.tsx`, keeping that design's
 /// three states — listening pill, collapsed match pill, expanded card — and its
 /// information hierarchy (title, confidence, status, latest update, blocker,
-/// actions). What is deliberately *not* carried over is the AI Q&A half: the
-/// thread, quick actions and the ask field all belong to a cloud-model feature
-/// this build does not have, and a text field would force the panel to take
-/// keyboard focus mid-call.
+/// actions).
 ///
-/// A live transcript strip replaces them, which is the more honest use of the
-/// space: it shows the user what Wikily is actually hearing, so a call with no
-/// suggestions still reads as working rather than broken.
+/// Visual language matches the Claude Design wireframes (`Wikily Wireframes.dc.html`,
+/// project `Wikily screen wireframes`) rather than the Tauri build: the brand
+/// blue and the matched-page amber badge come from `OverlayTheme`, chip vs.
+/// plain-text styling distinguishes page actions (Copy Status, Open Page) from
+/// quick-ask questions (What should I say?, Recap), and the card's translucency
+/// follows the user's Behavior-settings slider through `OverlayMaterial` rather
+/// than a fixed material.
+///
 struct OverlayView: View {
 
     let session: CallSession
+    let settings: AppSettings
     var onStop: () -> Void
     var onHeightChange: (CGFloat) -> Void
 
@@ -28,6 +31,17 @@ struct OverlayView: View {
     @FocusState private var isAskFocused: Bool
 
     private var document: WikiDocument? { session.currentMatch?.document }
+
+    /// Says what the session is actually doing. `.starting` gets its own line
+    /// because permission checks and device setup take a noticeable moment, and
+    /// during it the HUD previously claimed to be listening already.
+    private var listeningLine: String {
+        switch session.phase {
+        case .idle: "Wikily isn't listening"
+        case .starting: "Starting…"
+        case .listening: "Wikily is listening"
+        }
+    }
 
     private var ask: AskSession { session.askSession }
 
@@ -45,7 +59,7 @@ struct OverlayView: View {
                 expandedCard
             }
         }
-        .font(.system(size: 12))
+        .hudFont(12)
         .padding(.horizontal, 10)
         .padding(.top, 6)
         .padding(.bottom, 12)
@@ -59,6 +73,7 @@ struct OverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.easeOut(duration: 0.18), value: session.currentMatch)
         .animation(.easeOut(duration: 0.18), value: isCollapsed)
+        .environment(\.overlayFontSize, CGFloat(settings.overlayFontSize))
     }
 
     // MARK: - Collapsed
@@ -66,7 +81,7 @@ struct OverlayView: View {
     private var collapsedPill: some View {
         HStack(spacing: 8) {
             if let document {
-                WikilyMark(size: 16)
+                MatchBadge(size: 20)
                 Text(document.title)
                     .fontWeight(.medium)
                     .lineLimit(1)
@@ -75,18 +90,19 @@ struct OverlayView: View {
                     ConfidenceBadge(score: score)
                 }
             } else {
-                PulsingDot(isActive: session.isSpeechActive)
-                Text("Wikily is listening")
+                WikilyMark(size: 20)
+                Text(listeningLine)
                     .fontWeight(.medium)
+                PulsingDot(isListening: session.isListening, isActive: session.isSpeechActive)
             }
 
             HUDIconButton("chevron.down", help: "Show") { isCollapsed = false }
             Divider().frame(height: 12)
             HUDIconButton("stop.fill", help: "Stop listening", role: .destructive, action: onStop)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(OverlayMaterial.material(for: settings.overlayOpacity), in: Capsule())
         .overlay(Capsule().strokeBorder(.primary.opacity(0.12)))
         .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
         .frame(maxWidth: .infinity)
@@ -100,7 +116,7 @@ struct OverlayView: View {
 
             if let message = session.errorMessage {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
+                    .hudFont(11)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -108,29 +124,34 @@ struct OverlayView: View {
             if let document {
                 suggestion(document)
             } else {
-                Text("Keep talking — Wikily will surface a page here when something in your wiki matches.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    session.isListening
+                        ? "Keep talking — Wikily will surface a page here when something in your wiki matches."
+                        : "Wikily isn't listening. Start a session from the menu bar, and pages will appear here as you talk."
+                )
+                .hudFont(11)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
-            transcriptStrip
             askSection
         }
         .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            OverlayMaterial.material(for: settings.overlayOpacity),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(.primary.opacity(0.12))
         )
         .shadow(color: .black.opacity(0.28), radius: 14, y: 4)
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             if let document {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(.yellow)
+                MatchBadge(size: 20)
                 Text(document.title)
                     .fontWeight(.semibold)
                     .lineLimit(1)
@@ -139,10 +160,10 @@ struct OverlayView: View {
                     ConfidenceBadge(score: score)
                 }
             } else {
-                WikilyMark(size: 16)
+                WikilyMark(size: 20)
                 Text("Wikily")
                     .fontWeight(.semibold)
-                PulsingDot(isActive: session.isSpeechActive)
+                PulsingDot(isListening: session.isListening, isActive: session.isSpeechActive)
             }
 
             Spacer(minLength: 4)
@@ -163,10 +184,10 @@ struct OverlayView: View {
         if let status = document.status, !status.isEmpty {
             HStack(spacing: 6) {
                 Text("Status:")
-                    .font(.system(size: 10))
+                    .hudFont(10)
                     .foregroundStyle(.secondary)
                 Text(status)
-                    .font(.system(size: 10, weight: .semibold))
+                    .hudFont(10, weight: .semibold)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(.primary.opacity(0.1), in: Capsule())
@@ -175,16 +196,36 @@ struct OverlayView: View {
 
         let detail = document.latestUpdate ?? document.summary
         if !detail.isEmpty {
-            Text(detail)
-                .font(.system(size: 11))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(document.latestUpdate != nil ? "LATEST UPDATE" : "SUMMARY")
+                    .hudFont(9, weight: .semibold)
+                    .tracking(0.4)
+                    .foregroundStyle(OverlayTheme.accent.opacity(0.75))
+                Text(detail)
+                    .hudFont(11.5, weight: .medium)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(OverlayTheme.accent.opacity(0.1))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(OverlayTheme.accent.opacity(0.22))
+            )
         }
 
         if let blocker = document.blocker, !blocker.isEmpty {
-            Text("**Blocker:** \(blocker)")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 4) {
+                Text("❝").hudFont(13, weight: .bold).foregroundStyle(.tertiary)
+                (Text("Blocker: ").fontWeight(.semibold) + Text(blocker))
+                    .hudFont(10)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
 
         // `WrapLayout` rather than an HStack: two external links plus the two
@@ -213,34 +254,6 @@ struct OverlayView: View {
         }
     }
 
-    // MARK: - Transcript
-
-    private var transcriptStrip: some View {
-        let recent = session.transcript.suffix(4)
-        return VStack(alignment: .leading, spacing: 3) {
-            Divider().opacity(0.5)
-            if recent.isEmpty {
-                Text(session.isListening ? "Listening…" : "Not listening")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(recent) { segment in
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(segment.speakerLabel)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(segment.source == .microphone ? .blue : .secondary)
-                            .frame(width: 30, alignment: .leading)
-                        Text(segment.text)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Ask Wikily
 
     /// Quick actions, the answer thread, and the ask field.
@@ -255,9 +268,18 @@ struct OverlayView: View {
     private var askSection: some View {
         Divider().opacity(0.5)
 
-        WrapLayout(spacing: 6) {
-            ForEach(QuickAction.allCases) { action in
-                HUDActionButton(title: action.title, systemImage: action.systemImage) {
+        // Plain icon-and-label items with dot separators, not filled chips —
+        // these are a running row of *questions to ask*, not results to act on
+        // the way the page's own actions (Copy Status, Open Page) are. Keeping
+        // them visually quieter is what tells them apart at a glance.
+        WrapLayout(spacing: 7) {
+            ForEach(Array(QuickAction.allCases.enumerated()), id: \.offset) { index, action in
+                if index > 0 {
+                    Circle()
+                        .fill(.secondary.opacity(0.35))
+                        .frame(width: 3, height: 3)
+                }
+                HUDInlineAction(title: action.title, systemImage: action.systemImage) {
                     session.run(action)
                 }
                 .disabled(ask.isAnswering)
@@ -271,7 +293,7 @@ struct OverlayView: View {
                 }
                 if ask.isAnswering {
                     Text("Thinking…")
-                        .font(.system(size: 10))
+                        .hudFont(10)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -279,7 +301,7 @@ struct OverlayView: View {
 
         if let message = ask.errorMessage {
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 10))
+                .hudFont(10)
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -287,7 +309,7 @@ struct OverlayView: View {
         HStack(spacing: 6) {
             TextField("Ask Wikily…", text: askDraft)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
+                .hudFont(11)
                 .focused($isAskFocused)
                 .onSubmit { session.submitAsk() }
                 .onKeyPress(.escape) {
@@ -301,8 +323,13 @@ struct OverlayView: View {
             if ask.isAnswering {
                 HUDIconButton("stop.circle", help: "Stop answering") { ask.cancel() }
             } else {
-                HUDIconButton("arrow.up.circle.fill", help: "Ask") { session.submitAsk() }
-                    .disabled(!ask.canSend)
+                HUDIconButton(
+                    "arrow.up.circle.fill",
+                    help: "Ask",
+                    tint: ask.canSend ? OverlayTheme.accent : nil,
+                    action: { session.submitAsk() }
+                )
+                .disabled(!ask.canSend)
             }
 
             if !ask.messages.isEmpty {
@@ -314,7 +341,7 @@ struct OverlayView: View {
         .background(Capsule().fill(.primary.opacity(0.06)))
         .overlay(
             Capsule().strokeBorder(
-                isAskFocused ? Color.accentColor.opacity(0.6) : .primary.opacity(0.12)
+                isAskFocused ? OverlayTheme.accent.opacity(0.6) : .primary.opacity(0.12)
             )
         )
     }
@@ -324,18 +351,36 @@ struct OverlayView: View {
             if message.role == .user {
                 Spacer(minLength: 24)
                 Text(message.text)
-                    .font(.system(size: 11, weight: .medium))
+                    .hudFont(11, weight: .medium)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.85))
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 10,
+                            bottomLeadingRadius: 10,
+                            bottomTrailingRadius: 4,
+                            topTrailingRadius: 10,
+                            style: .continuous
+                        )
+                        .fill(OverlayTheme.accent)
                     )
                     .foregroundStyle(.white)
             } else {
-                WikilyMark(size: 13)
+                WikilyMark(size: 14)
                 Text(message.text)
-                    .font(.system(size: 11))
+                    .hudFont(11)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 4,
+                            bottomLeadingRadius: 10,
+                            bottomTrailingRadius: 10,
+                            topTrailingRadius: 10,
+                            style: .continuous
+                        )
+                        .fill(.primary.opacity(0.06))
+                    )
                     .fixedSize(horizontal: false, vertical: true)
                     // Answers get read aloud or pasted; selection is the cheapest
                     // way to let someone grab a phrase mid-call.
@@ -378,10 +423,26 @@ private struct WikilyMark: View {
 
     var body: some View {
         Text("W")
-            .font(.system(size: size * 0.6, weight: .bold))
+            .font(.system(size: size * 0.55, weight: .bold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
-            .background(Color.accentColor, in: Circle())
+            .background(OverlayTheme.accent, in: Circle())
+    }
+}
+
+/// The amber badge shown in place of `WikilyMark` while a page is matched —
+/// the wireframe's lightbulb-in-a-circle, so a glance at the collapsed pill
+/// tells "idle" (blue W) from "found something" (amber bulb) without reading
+/// the title next to it.
+private struct MatchBadge: View {
+    var size: CGFloat
+
+    var body: some View {
+        Image(systemName: "lightbulb.fill")
+            .font(.system(size: size * 0.42, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(OverlayTheme.matchBadge, in: Circle())
     }
 }
 
@@ -390,46 +451,69 @@ private struct ConfidenceBadge: View {
 
     var body: some View {
         Text("\(Int((score * 100).rounded()))%")
-            .font(.system(size: 9, weight: .semibold))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(.primary.opacity(0.1), in: Capsule())
+            .hudFont(9, weight: .semibold)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .foregroundStyle(OverlayTheme.accent)
+            .background(OverlayTheme.accent.opacity(0.12), in: Capsule())
             .help("Match confidence")
     }
 }
 
 /// The listening indicator. Pulses continuously so a silent stretch of call
 /// still reads as "running", and brightens while the VAD hears speech.
+///
+/// `isListening` is not decoration. This dot was green and pulsing whenever the
+/// HUD was on screen, including with the session idle, so the panel asserted
+/// that Wikily was hearing the call when it was not — the one thing this cue
+/// exists to tell the truth about, and the reason Stop looked like it had failed.
 private struct PulsingDot: View {
+    var isListening: Bool
     var isActive: Bool
     @State private var isPulsing = false
 
     var body: some View {
         Circle()
-            .fill(.green)
+            .fill(isListening ? Color.green : Color.secondary)
             .frame(width: 8, height: 8)
             .overlay {
                 Circle()
                     .stroke(.green, lineWidth: 1)
-                    .scaleEffect(isPulsing ? 2.2 : 1)
-                    .opacity(isPulsing ? 0 : 0.7)
+                    .scaleEffect(isPulsing && isListening ? 2.2 : 1)
+                    .opacity(isPulsing && isListening ? 0 : 0.7)
+                    .opacity(isListening ? 1 : 0)
             }
-            .opacity(isActive ? 1 : 0.65)
+            .opacity(isListening ? (isActive ? 1 : 0.65) : 0.5)
             .animation(.easeInOut(duration: 1).repeatForever(autoreverses: false), value: isPulsing)
             .onAppear { isPulsing = true }
     }
 }
 
+/// A control circle — Stop, Hide/Show, Dismiss — matching the wireframe's
+/// `.top-pill-stop`/`.ctrl`: a subtly-filled circle at rest, not a bare glyph.
+/// The fill is what reads as "this is a button" at HUD scale, where a plain
+/// icon with only a hover-tint is easy to miss entirely.
 private struct HUDIconButton: View {
     let symbol: String
     let help: String
     var role: ButtonRole?
+    /// Overrides the default secondary/primary tint — used for the send button,
+    /// which should read as accent-colored whenever it's enabled, not only on
+    /// hover.
+    var tint: Color?
     let action: () -> Void
 
-    init(_ symbol: String, help: String, role: ButtonRole? = nil, action: @escaping () -> Void) {
+    init(
+        _ symbol: String,
+        help: String,
+        role: ButtonRole? = nil,
+        tint: Color? = nil,
+        action: @escaping () -> Void
+    ) {
         self.symbol = symbol
         self.help = help
         self.role = role
+        self.tint = tint
         self.action = action
     }
 
@@ -438,38 +522,81 @@ private struct HUDIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 16, height: 16)
-                .contentShape(Rectangle())
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 21, height: 21)
+                .background(Circle().fill(fill))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(tint)
+        .foregroundStyle(foreground)
         .onHover { isHovering = $0 }
         .help(help)
     }
 
-    private var tint: Color {
+    private var foreground: Color {
+        if let tint { return tint }
         guard isHovering else { return .secondary }
         return role == .destructive ? .red : .primary
     }
+
+    private var fill: Color {
+        if isHovering {
+            return role == .destructive ? Color.red.opacity(0.16) : Color.primary.opacity(0.12)
+        }
+        return Color.primary.opacity(0.07)
+    }
 }
 
+/// A bordered pill for an action with a concrete result — Copy Status, Open
+/// Page, an external link. Matches the wireframe's `.chip`: outlined, not
+/// filled, so it reads as a distinct affordance from the plain-text quick-ask
+/// items in `HUDInlineAction`.
 private struct HUDActionButton: View {
     let title: String
     let systemImage: String
     let action: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 10, weight: .medium))
+                .hudFont(10, weight: .semibold)
                 .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                .contentShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(isHovering ? OverlayTheme.accent.opacity(0.1) : .primary.opacity(0.03))
+                )
+                .overlay(Capsule().strokeBorder(.primary.opacity(0.16)))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .foregroundStyle(isHovering ? OverlayTheme.accent : .primary)
+        .onHover { isHovering = $0 }
+    }
+}
+
+/// One item in the quick-ask row — icon and label only, no fill or border.
+/// The wireframe's `.act-item`: these are questions to ask, not results to act
+/// on, so they read quieter than `HUDActionButton`'s chips.
+private struct HUDInlineAction: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .hudFont(10.5, weight: .semibold)
+                .labelStyle(.titleAndIcon)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isHovering ? OverlayTheme.accent : .secondary)
+        .onHover { isHovering = $0 }
     }
 }
 

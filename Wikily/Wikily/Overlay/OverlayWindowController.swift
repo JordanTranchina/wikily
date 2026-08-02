@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import SwiftUI
 
 /// Owns the overlay panel: where it sits, how it grows, and when it is on screen.
@@ -17,7 +18,7 @@ final class OverlayWindowController {
     /// deliberate choice, usually mid-sentence.
     private var userPositioned = false
 
-    init(session: CallSession, onStop: @escaping () -> Void) {
+    init(session: CallSession, settings: AppSettings = .shared, onStop: @escaping () -> Void) {
         self.session = session
 
         let initialFrame = OverlayLayout.frame(
@@ -31,6 +32,7 @@ final class OverlayWindowController {
         let hosting = NSHostingView(
             rootView: OverlayView(
                 session: session,
+                settings: settings,
                 onStop: onStop,
                 onHeightChange: { [weak self] height in
                     self?.applyContentHeight(height)

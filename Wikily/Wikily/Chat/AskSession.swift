@@ -39,6 +39,14 @@ final class AskSession {
     /// than scrolled, so the card never grows without bound during a long call.
     static let messageLimit = 20
 
+    /// Hard ceiling on one answer's length, independent of whatever cap the
+    /// backend was asked to honour. Both backends are told to stop generating
+    /// well before this — see `AppleFoundationModelService.maximumResponseTokens`
+    /// and `ChatCompletionRequest.maxTokens` — but a request-side limit is the
+    /// backend's word, not a guarantee, and a degenerate loop that ignores it is
+    /// exactly the failure this exists to catch regardless of backend or prompt.
+    static let maximumAnswerCharacters = 4_000
+
     private var task: Task<Void, Never>?
 
     var canSend: Bool {
@@ -86,6 +94,24 @@ final class AskSession {
         errorMessage = nil
 
         append(Message(role: .user, text: displayText ?? question))
+
+        // No page and nothing transcribed is not a question a model can answer —
+        // it is a request to describe nothing. The system prompt already tells
+        // the model to say so itself, but that is a request, not a guarantee:
+        // asked to "recap the call" with no call to recap, the on-device model
+        // was observed spinning out the same invented bullet point hundreds of
+        // times rather than admitting it had nothing to recap. Answering it here
+        // costs nothing, is never wrong, and removes the failure mode entirely
+        // rather than hoping the prompt is obeyed.
+        guard page != nil || !transcript.isEmpty else {
+            append(Message(
+                role: .assistant,
+                text: "Nothing to go on yet — no page has matched and nothing has been "
+                    + "transcribed. Start listening, or open a page first."
+            ))
+            return
+        }
+
         let answerID = append(Message(role: .assistant, text: ""))
         isAnswering = true
 
@@ -102,7 +128,12 @@ final class AskSession {
                     systemPrompt: prompt.system
                 ) {
                     if Task.isCancelled { return }
-                    self?.appendDelta(delta, to: answerID)
+                    guard let self, self.appendDelta(delta, to: answerID) else {
+                        // Either the session went away, or the answer hit the
+                        // runaway-length ceiling — either way, stop pulling more
+                        // tokens through a stream nothing will read further.
+                        return
+                    }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -137,9 +168,19 @@ final class AskSession {
         return message.id
     }
 
-    private func appendDelta(_ delta: String, to id: UUID) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+    /// Appends one delta, returning whether the caller should keep pulling more.
+    /// `false` means either the message is gone (session cleared mid-stream) or
+    /// the answer just crossed `maximumAnswerCharacters` and generation should
+    /// stop — see the constant's doc for why that ceiling exists at all.
+    private func appendDelta(_ delta: String, to id: UUID) -> Bool {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return false }
         messages[index].text += delta
+
+        guard messages[index].text.count > Self.maximumAnswerCharacters else { return true }
+        messages[index].text = String(messages[index].text.prefix(Self.maximumAnswerCharacters))
+            + "…\n\n[Stopped — this answer was running far longer than expected.]"
+        isAnswering = false
+        return false
     }
 
     private func finishAnswer(_ id: UUID) {

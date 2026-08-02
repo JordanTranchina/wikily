@@ -1,40 +1,85 @@
+import AppKit
 import SwiftUI
 
-/// The contents of the app's `Settings` scene.
+/// One pane of the settings window.
+enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
+    case general
+    case knowledgeBase
+    case model
+    case behavior
+    case audio
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .knowledgeBase: "Knowledge Base"
+        case .model: "Model"
+        case .behavior: "Behavior"
+        case .audio: "Audio"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .knowledgeBase: "books.vertical"
+        case .model: "cpu"
+        case .behavior: "slider.horizontal.3"
+        case .audio: "waveform"
+        }
+    }
+
+    var itemIdentifier: NSToolbarItem.Identifier {
+        NSToolbarItem.Identifier("settings.\(rawValue)")
+    }
+
+    init?(itemIdentifier: NSToolbarItem.Identifier) {
+        guard let tab = SettingsTab.allCases.first(where: { $0.itemIdentifier == itemIdentifier })
+        else { return nil }
+        self = tab
+    }
+}
+
+/// The contents of one settings pane.
 ///
-/// A standard macOS preferences window with toolbar tabs, not a bespoke
-/// dashboard. Wikily is an `LSUIElement` app with no main window, so this is the
-/// only conventional surface it has, and the value of it being conventional is
-/// that the user already knows where everything is — ⌘, opens it, tabs across
-/// the top, changes take effect immediately with no Save button.
+/// This used to be a SwiftUI `TabView`, which is where the "floating grey band"
+/// in the title bar came from: in a plain `NSWindow` a `TabView` draws its own
+/// segmented picker on its own backdrop, sized to the tab titles rather than to
+/// the window, so it reads as a stray control laid over the chrome instead of as
+/// part of it. Real Mac settings windows use a toolbar in `.preference` style,
+/// which is what `SettingsWindowController` now supplies — so this view renders
+/// a single pane and the window owns the switching.
 ///
-/// Reached from the menu bar rather than a menu-bar-less app's ⌘, alone; see
-/// `MenuBarController.openSettings()`.
+/// The value of being conventional is that the user already knows where
+/// everything is: ⌘, opens it, tabs across the top, changes take effect
+/// immediately with no Save button.
 @MainActor
 struct SettingsRootView: View {
 
     @Bindable private var settings: AppSettings
+    private let tab: SettingsTab
 
-    init(settings: AppSettings = .shared) {
+    init(settings: AppSettings = .shared, tab: SettingsTab = .general) {
         _settings = Bindable(settings)
+        self.tab = tab
     }
 
     var body: some View {
-        TabView {
-            GeneralSettingsView(settings: settings)
-                .tabItem { Label("General", systemImage: "gearshape") }
-
-            KnowledgeBaseSettingsView(settings: settings)
-                .tabItem { Label("Knowledge Base", systemImage: "books.vertical") }
-
-            ModelSettingsView(settings: settings)
-                .tabItem { Label("Model", systemImage: "cpu") }
-
-            BehaviorSettingsView(settings: settings)
-                .tabItem { Label("Behavior", systemImage: "slider.horizontal.3") }
-
-            AudioSettingsView(settings: settings)
-                .tabItem { Label("Audio", systemImage: "waveform") }
+        Group {
+            switch tab {
+            case .general:
+                GeneralSettingsView(settings: settings)
+            case .knowledgeBase:
+                KnowledgeBaseSettingsView(settings: settings)
+            case .model:
+                ModelSettingsView(settings: settings)
+            case .behavior:
+                BehaviorSettingsView(settings: settings)
+            case .audio:
+                AudioSettingsView(settings: settings)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

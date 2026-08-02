@@ -55,7 +55,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // `--overlay-preview`, which builds a controller to check the HUD and
         // must stay non-interactive.
         if OverlayPreview.requestedVaultPath() == nil {
-            Task { @MainActor in self.presentOnboardingIfNeeded() }
+            Task { @MainActor in self.presentStartupWindow() }
         }
     }
 
@@ -75,13 +75,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Show the first-run wizard if this install has never seen it.
+    /// Show the first-run wizard if this install has never seen it; otherwise
+    /// open Settings. Wikily has no main window, so without this, launching it
+    /// — from the Dock, from Xcode, from anywhere — puts nothing at all on
+    /// screen, and the only sign anything happened is a small icon appearing
+    /// in the menu bar. Settings is the closest thing this app has to a home
+    /// screen, and opening it is what makes "I launched Wikily" read as having
+    /// done something.
     ///
     /// Driven from here rather than from the app delegate because this is the
     /// object that owns the app's control surface, and the wizard's last step
     /// points at it. Exposed so whatever assembles the app can take it over.
-    func presentOnboardingIfNeeded() {
-        OnboardingWindowController.presentIfNeeded(settings: settings)
+    func presentStartupWindow() {
+        guard !OnboardingWindowController.presentIfNeeded(settings: settings) else { return }
+        SettingsWindowController.present(settings: settings)
     }
 
     private let logger = Logger(subsystem: "com.wikily.Wikily", category: "MenuBarController")
@@ -110,9 +117,50 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     /// Rebuilt on every open rather than mutated in place, because the titles
     /// depend on session state that changes without the menu being involved.
+    ///
+    /// Serves two menus: this controller's status-bar menu, and the Session menu
+    /// in the app's own menu bar (see `AppMainMenu`). They are the same commands,
+    /// so they are built from one place — the status menu additionally carries
+    /// Settings, Setup Assistant and Quit, which the menu bar already has of its
+    /// own.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        populateSessionItems(into: menu)
 
+        guard menu === statusItem.menu else { return }
+
+        menu.addItem(.separator())
+
+        // ⌘, is shown because it is the shortcut every Mac user reaches for, and
+        // it works *while this menu is open*. It does not work globally — Wikily
+        // has no menu bar of its own to route it — which is exactly why the item
+        // has to exist rather than relying on the keystroke.
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        let setup = NSMenuItem(
+            title: "Setup Assistant…",
+            action: #selector(openOnboarding),
+            keyEquivalent: ""
+        )
+        setup.target = self
+        menu.addItem(setup)
+
+        menu.addItem(.separator())
+
+        let quit = NSMenuItem(title: "Quit Wikily", action: #selector(quit), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+    }
+
+    /// The commands both menus share: what Wikily is doing, and every verb that
+    /// changes it.
+    func populateSessionItems(into menu: NSMenu) {
         menu.addItem(disabledItem(statusLine))
         menu.addItem(disabledItem(wikiLine))
         if let error = session.errorMessage {
@@ -126,6 +174,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             keyEquivalent: "l"
         )
         toggle.target = self
+        // Disabled mid-transition: `startListening` takes a moment to check
+        // permissions and spin up capture, and a second click during that window
+        // is a no-op that reads as the menu being broken.
+        toggle.isEnabled = session.phase != .starting
         menu.addItem(toggle)
 
         let overlayItem = NSMenuItem(
@@ -162,34 +214,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         rescan.target = self
         rescan.isEnabled = settings.wikiFolderPath != nil
         menu.addItem(rescan)
-
-        menu.addItem(.separator())
-
-        // ⌘, is shown because it is the shortcut every Mac user reaches for, and
-        // it works *while this menu is open*. It does not work globally — Wikily
-        // has no menu bar of its own to route it — which is exactly why the item
-        // has to exist rather than relying on the keystroke.
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        let setup = NSMenuItem(
-            title: "Setup Assistant…",
-            action: #selector(openOnboarding),
-            keyEquivalent: ""
-        )
-        setup.target = self
-        menu.addItem(setup)
-
-        menu.addItem(.separator())
-
-        let quit = NSMenuItem(title: "Quit Wikily", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
     }
 
     // MARK: - Items

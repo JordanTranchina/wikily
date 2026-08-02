@@ -10,10 +10,14 @@ import CoreGraphics
 /// at the top of the display.
 enum OverlayLayout {
 
-    /// Fixed width, matching the Tauri build's 320pt card plus its window margin.
-    /// Fixed rather than proportional because a call HUD that changes width
-    /// between a pill and a card reads as a layout bug, not as responsiveness.
-    static let width: CGFloat = 360
+    /// Fixed width. Wider than the Tauri build's original 320pt card: the quick
+    /// actions row (`What should I say?` / `Follow-up questions` / `Fact-check`
+    /// / `Recap`) needs to sit on one line rather than wrap, and wrapping got
+    /// more likely, not less, once the overlay text-size setting could push
+    /// past its 1x default. Fixed rather than proportional because a call HUD
+    /// that changes width between a pill and a card reads as a layout bug, not
+    /// as responsiveness.
+    static let width: CGFloat = 460
 
     /// Gap between the top of the display and the top of the panel.
     ///

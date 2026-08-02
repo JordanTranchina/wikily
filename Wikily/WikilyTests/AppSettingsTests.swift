@@ -39,6 +39,8 @@ struct AppSettingsTests {
             #expect(settings.indexStats == nil)
             #expect(settings.suggestionFrequency == .medium)
             #expect(settings.confidenceThreshold == WikiMatchCoordinator.defaultThreshold)
+            #expect(settings.overlayOpacity == 0.6)
+            #expect(settings.overlayFontSize == 14)
             #expect(settings.inputDeviceID == AudioDevice.systemDefaultID)
             #expect(settings.outputDeviceID == AudioDevice.systemDefaultID)
             #expect(settings.capturesMicrophone)
@@ -55,6 +57,8 @@ struct AppSettingsTests {
             #expect(defaults.object(forKey: AppSettings.Key.capturesMicrophone) == nil)
             #expect(defaults.object(forKey: AppSettings.Key.confidenceThreshold) == nil)
             #expect(defaults.object(forKey: AppSettings.Key.suggestionFrequency) == nil)
+            #expect(defaults.object(forKey: AppSettings.Key.overlayOpacity) == nil)
+            #expect(defaults.object(forKey: AppSettings.Key.overlayFontSize) == nil)
         }
     }
 
@@ -78,6 +82,8 @@ struct AppSettingsTests {
             settings.indexStats = stats
             settings.suggestionFrequency = .high
             settings.confidenceThreshold = 0.55
+            settings.overlayOpacity = 0.25
+            settings.overlayFontSize = 16
             settings.inputDeviceID = "MicUID"
             settings.outputDeviceID = "SpeakerUID"
             settings.capturesMicrophone = false
@@ -89,6 +95,8 @@ struct AppSettingsTests {
             #expect(reloaded.indexStats == stats)
             #expect(reloaded.suggestionFrequency == .high)
             #expect(reloaded.confidenceThreshold == 0.55)
+            #expect(reloaded.overlayOpacity == 0.25)
+            #expect(reloaded.overlayFontSize == 16)
             #expect(reloaded.inputDeviceID == "MicUID")
             #expect(reloaded.outputDeviceID == "SpeakerUID")
             #expect(!reloaded.capturesMicrophone)
@@ -194,6 +202,24 @@ struct AppSettingsTests {
         }
         try withSettings(seed: [AppSettings.Key.confidenceThreshold: -3.0]) { settings, _ in
             #expect(settings.confidenceThreshold == 0)
+        }
+    }
+
+    @Test func anOutOfRangeOverlayOpacityIsClamped() throws {
+        try withSettings(seed: [AppSettings.Key.overlayOpacity: 4.0]) { settings, _ in
+            #expect(settings.overlayOpacity == 1)
+        }
+        try withSettings(seed: [AppSettings.Key.overlayOpacity: -1.0]) { settings, _ in
+            #expect(settings.overlayOpacity == 0)
+        }
+    }
+
+    @Test func anOutOfRangeFontSizeIsClamped() throws {
+        try withSettings(seed: [AppSettings.Key.overlayFontSize: 99]) { settings, _ in
+            #expect(settings.overlayFontSize == 20)
+        }
+        try withSettings(seed: [AppSettings.Key.overlayFontSize: 1]) { settings, _ in
+            #expect(settings.overlayFontSize == 10)
         }
     }
 

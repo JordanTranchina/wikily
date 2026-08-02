@@ -52,6 +52,8 @@ final class AppSettings {
         static let qaModel = "settings.model.qa"
         static let suggestionFrequency = "settings.behavior.suggestionFrequency"
         static let confidenceThreshold = "settings.behavior.confidenceThreshold"
+        static let overlayOpacity = "settings.behavior.overlayOpacity"
+        static let overlayFontSize = "settings.behavior.overlayFontSize"
         static let inputDeviceID = "settings.audio.inputDeviceID"
         static let outputDeviceID = "settings.audio.outputDeviceID"
         static let capturesMicrophone = "settings.audio.capturesMicrophone"
@@ -154,6 +156,36 @@ final class AppSettings {
         set { confidenceThreshold = newValue.threshold }
     }
 
+    /// How solid the HUD's background reads, from `0` (mostly the call showing
+    /// through) to `1` (closer to a solid card). Drives the `Material` the
+    /// overlay draws into — see `OverlayMaterial`.
+    ///
+    /// Defaults to `0.6` rather than either extreme: fully transparent makes the
+    /// suggestion text hard to read over a bright call window, and fully opaque
+    /// is a bigger visual interruption than a HUD meant to sit alongside a call
+    /// should be.
+    var overlayOpacity: Double = 0.6 {
+        didSet {
+            guard !isRestoring, overlayOpacity != oldValue else { return }
+            defaults.set(overlayOpacity, forKey: Key.overlayOpacity)
+        }
+    }
+
+    /// The HUD's base text size in points — what the document title and header
+    /// read at, with every smaller label (status, quick actions, badges) scaled
+    /// to match. A concrete point size rather than a percentage or multiplier:
+    /// "14pt" is a number a user already has an opinion about; "1.17x" is not.
+    /// Defaults above `OverlayTheme.referenceFontSize` (`12`) rather than at
+    /// it — the sizes the HUD was designed around read as too small at a
+    /// glance across a call window, and this is the direction a user turns it,
+    /// not the other way.
+    var overlayFontSize: Int = 14 {
+        didSet {
+            guard !isRestoring, overlayFontSize != oldValue else { return }
+            defaults.set(overlayFontSize, forKey: Key.overlayFontSize)
+        }
+    }
+
     // MARK: - Audio
 
     /// CoreAudio device UIDs, or `AudioDevice.systemDefaultID` for "follow the
@@ -235,6 +267,12 @@ final class AppSettings {
             // `defaults write`, and any future change to what the presets mean.
             // An out-of-range threshold silently matches everything or nothing.
             confidenceThreshold = min(max(defaults.double(forKey: Key.confidenceThreshold), 0), 1)
+        }
+        if defaults.object(forKey: Key.overlayOpacity) != nil {
+            overlayOpacity = min(max(defaults.double(forKey: Key.overlayOpacity), 0), 1)
+        }
+        if defaults.object(forKey: Key.overlayFontSize) != nil {
+            overlayFontSize = min(max(defaults.integer(forKey: Key.overlayFontSize), 10), 20)
         }
 
         inputDeviceID = defaults.string(forKey: Key.inputDeviceID) ?? AudioDevice.systemDefaultID
@@ -341,9 +379,9 @@ final class AppSettings {
     func resetAll() {
         for key in [
             Key.launchAtLogin, Key.wikiFolderPath, Key.wikiIndexStats, Key.qaModel,
-            Key.suggestionFrequency, Key.confidenceThreshold, Key.inputDeviceID,
-            Key.outputDeviceID, Key.capturesMicrophone, Key.hasCompletedOnboarding,
-            Key.legacyWikiFolderPath,
+            Key.suggestionFrequency, Key.confidenceThreshold, Key.overlayOpacity,
+            Key.overlayFontSize, Key.inputDeviceID, Key.outputDeviceID, Key.capturesMicrophone,
+            Key.hasCompletedOnboarding, Key.legacyWikiFolderPath,
         ] {
             defaults.removeObject(forKey: key)
         }
