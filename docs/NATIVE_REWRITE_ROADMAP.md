@@ -17,8 +17,9 @@ session (or a future you) can pick this up without re-deriving it.
   full test suite on `macos-latest`) and paused `.github/workflows/publish.yml`
   (was auto-publishing a release of the **old Tauri app** on every push to
   `master` — now `workflow_dispatch` only, so merging this branch can't
-  accidentally trigger it). Neither has actually run in GitHub Actions yet —
-  see "Verify CI actually works" below.
+  accidentally trigger it). Verified working in GitHub Actions —
+  [run #13](https://github.com/JordanTranchina/wikily/actions/runs/30764485999)
+  passed, including the new `swift` job.
 
 ## Not ready to merge into `master` yet
 
@@ -31,14 +32,7 @@ first one.
 
 ## Next steps, roughly in order
 
-1. ~~**Verify CI actually works.**~~ Done (2026-08-02) — pushed to
-   `origin/native-rewrite` and watched
-   [run #13](https://github.com/JordanTranchina/wikily/actions/runs/30764485999):
-   all three jobs passed, including the new `swift` job (49s,
-   `xcodebuild test` on `macos-latest`). `latest-stable` Xcode resolution
-   worked fine on the runner — no version pinning needed.
-
-2. **Do the hands-on verification pass.** These are real product-behavior
+1. **Do the hands-on verification pass.** These are real product-behavior
    questions, not something more unit tests would catch:
    - Overlay behavior against a real full-screen Zoom call, and following the
      user across Spaces/desktops — asserted as window flags in
@@ -50,49 +44,14 @@ first one.
      never compared side-by-side against the Claude Design mockup, only
      checked via `--overlay-preview` screenshots.
 
-3. ~~**Look at the two build warnings.**~~ Done — clean build now has zero
-   Swift compiler warnings. `CoreAudioSupport.swift`'s `AudioObject.array`
-   switched from the implicit `&values` array-to-pointer conversion (which
-   the compiler can't clear for a generic `T`, even though every real call
-   site uses a trivial type) to the explicit `withUnsafeMutableBytes` API;
-   verified against real hardware with `--probe-audio` afterward, not just
-   by the warning disappearing. `OverlayView.swift`'s deprecated `Text + Text`
-   concatenation became nested `Text` string interpolation, which preserves
-   the same per-segment styling (semibold "Blocker: " label, regular-weight
-   body).
-
-4. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
+2. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
    `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
    `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, `components.json`,
    `.npmrc`, `.vscode/` if Tauri-specific. Cross-check `.gitignore` afterward
    — several entries (`node_modules`, `dist`, `coverage`) exist only for the
    Tauri app and can go too.
 
-5. ~~**Update the stale docs.**~~ Done.
-   - `README.md` — full rewrite. The old one wasn't even Wikily-specific: it
-     was still describing the upstream **Pluely** product (GPL v3 branding,
-     cross-platform Win/Linux, a license/monetization system, screenshot
-     capture, a chat Dashboard — none of which Wikily has), with one sentence
-     about Wikily awkwardly inserted. Now describes the actual native app,
-     how to build/test it, and flags the repo's mid-transition state plainly.
-   - `Tech Spec Wikily.md` — full rewrite. The old version specified an
-     entire Tauri/Rust/React/SQLite implementation, file paths and all, that
-     was never built. Replaced with the real architecture: component
-     diagram, module table, and file citations against what's actually in
-     `Wikily/Wikily/`.
-   - `Product Spec Wikily.md` — lighter touch, deliberately. The persona/
-     workflow/KPI/monetization thinking (§1, §2, §6–8) didn't change with the
-     tech stack, so it's untouched. Only the sections describing *how* it's
-     built (§1.3, §1.5, §3.1, §3.3, §4 — all the "Pluely fork" framing) got
-     inline "superseded, see top note" markers pointing at the Tech Spec,
-     rather than being rewritten in place — the Tech Spec is meant to be the
-     one current, authoritative build reference.
-   - `docs/LOCAL_TRANSCRIPTION.md` — full rewrite. The real story turned out
-     much simpler than the whisper.cpp-sidecar plan this doc detailed: Apple's
-     `Speech` framework downloads and manages its own on-device model, no
-     bundling/signing pipeline needed at all.
-
-6. **Decided (2026-08-02), not yet built: replace `publish.yml` with a free
+3. **Decided (2026-08-02), not yet built: replace `publish.yml` with a free
    distribution path — no Apple Developer Program enrollment for now.**
    Talked through as a product decision, not just an engineering one — full
    reasoning below, since the "why" matters if this gets revisited.
@@ -163,7 +122,7 @@ first one.
         instructions to the README's download section and/or the release
         notes template.
 
-7. **Merge to `master`**, once 4–6 are done and 2 has had a real pass.
+4. **Merge to `master`**, once 2–3 are done and 1 has had a real pass.
 
 ## Two things flagged earlier, still undecided
 
