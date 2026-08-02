@@ -31,13 +31,12 @@ first one.
 
 ## Next steps, roughly in order
 
-1. **Verify CI actually works.** The `swift` job in `ci.yml` has never run in
-   GitHub Actions — it was only exercised locally (`xcodebuild build`/`test`
-   against Xcode 26.6, macOS 26.0 deployment target). Push a commit (or open
-   a PR) and watch it. The most likely failure mode is Xcode-version mismatch
-   on the runner image — the job comment explains how to pin one with
-   `maxim-lobanov/setup-xcode`'s `xcode-version:` input if `latest-stable`
-   doesn't resolve a usable SDK/destination.
+1. ~~**Verify CI actually works.**~~ Done (2026-08-02) — pushed to
+   `origin/native-rewrite` and watched
+   [run #13](https://github.com/JordanTranchina/wikily/actions/runs/30764485999):
+   all three jobs passed, including the new `swift` job (49s,
+   `xcodebuild test` on `macos-latest`). `latest-stable` Xcode resolution
+   worked fine on the runner — no version pinning needed.
 
 2. **Do the hands-on verification pass.** These are real product-behavior
    questions, not something more unit tests would catch:
