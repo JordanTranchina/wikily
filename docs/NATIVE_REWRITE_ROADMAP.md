@@ -51,13 +51,16 @@ first one.
      never compared side-by-side against the Claude Design mockup, only
      checked via `--overlay-preview` screenshots.
 
-3. **Look at the two build warnings** (clean build, not currently blocking):
-   - `Wikily/Wikily/Audio/CoreAudioSupport.swift:90` — forming an
-     `UnsafeMutableRawPointer` to a Swift array that may hold object
-     references. Worth understanding, not just silencing — could be a real
-     memory-safety issue.
-   - `Wikily/Wikily/Overlay/OverlayView.swift:224` — deprecated `Text` `+`
-     concatenation (macOS 26 wants string interpolation instead). Cosmetic.
+3. ~~**Look at the two build warnings.**~~ Done — clean build now has zero
+   Swift compiler warnings. `CoreAudioSupport.swift`'s `AudioObject.array`
+   switched from the implicit `&values` array-to-pointer conversion (which
+   the compiler can't clear for a generic `T`, even though every real call
+   site uses a trivial type) to the explicit `withUnsafeMutableBytes` API;
+   verified against real hardware with `--probe-audio` afterward, not just
+   by the warning disappearing. `OverlayView.swift`'s deprecated `Text + Text`
+   concatenation became nested `Text` string interpolation, which preserves
+   the same per-segment styling (semibold "Blocker: " label, regular-weight
+   body).
 
 4. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
    `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
