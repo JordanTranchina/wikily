@@ -116,26 +116,39 @@ first one.
        Apple's notarization.
      - ✅ **GitHub Releases** as the free hosting/distribution point —
        ad-hoc/self-signed builds (`codesign --sign -`, what local Xcode runs
-       already use), no Developer ID needed to produce or host them.
-     - ⚠️ **The tradeoff this leaves in place:** every new version Sparkle
-       delivers is *still an unnotarized download* the first time its new
-       binary runs, so it **still triggers the Gatekeeper warning once per
-       update**, same as first install. Sparkle solves "does the app know
-       and offer to update," not "does macOS trust it." The mitigation is
-       procedural, not technical: document right-click → "Open" (which
-       surfaces an "Open Anyway" button in the dialog itself, rather than
-       sending someone into System Settings) prominently wherever the
-       download link lives — this needs to be real, visible instructions by
-       the time anyone outside Jordan is asked to download it, not a detail
-       left to word-of-mouth. Worth noting this workaround has been getting
-       quietly harder across recent macOS releases, so it's a mitigation,
-       not a permanent guarantee.
-     - **Revisit paying the fee if:** the Gatekeeper warning becomes a real
-       adoption blocker for new downloaders, or distribution ever wants to
-       move to TestFlight (internal testing without a public link — cleaner
-       for a small known group) or the Mac App Store — both still require
-       the same paid enrollment, so there's no cheaper tier that unlocks
-       just one of them.
+       already use), no Developer ID needed to produce or host them. May
+       need Hardened Runtime's "Library Validation" turned off for an
+       ad-hoc-signed build to load Sparkle at all — a build setting, not a
+       fee.
+     - **The tradeoff is smaller than first written here — corrected
+       2026-08-02.** Originally this said every Sparkle-delivered update
+       would re-trigger the Gatekeeper warning. That's wrong. Gatekeeper's
+       warning is gated specifically on the `com.apple.quarantine` extended
+       attribute, which only quarantine-aware downloaders (browsers, Mail,
+       etc.) apply — and **Sparkle strips that attribute from the updates it
+       downloads and installs**, well-documented enough that it's a known
+       security consideration for update-channel compromise, not a fringe
+       claim (see sources below). Net effect: **only the first manual
+       download+install** (from GitHub Releases, via a browser) needs the
+       right-click → "Open" workaround. Every update after that, delivered
+       through Sparkle, installs and relaunches with no repeat warning —
+       the actual "smooth in-app update" experience that was wanted,
+       achievable without paying anything. The workaround still needs to be
+       real, visible instructions wherever the download link lives (it's
+       every *new* user's first-install experience, permanently, not a
+       one-time launch problem) — that part of the original reasoning
+       stands.
+       Sources: [Sparkle docs](https://sparkle-project.org/documentation/)
+       (EdDSA verification is independent of Apple code-signing; ad-hoc
+       signed apps can receive updates), and
+       [lapcatsoftware.com's notarization analysis](https://lapcatsoftware.com/articles/notarization.html)
+       (quarantine-stripping behavior and its security implications, corroborated by SpecterOps' write-up of it as a real attack vector).
+     - **Revisit paying the fee if:** the first-install Gatekeeper warning
+       becomes a real adoption blocker for new downloaders, or distribution
+       ever wants to move to TestFlight (internal testing without a public
+       link — cleaner for a small known group) or the Mac App Store — both
+       still require the same paid enrollment, so there's no cheaper tier
+       that unlocks just one of them.
    - **Concrete build steps, not yet started:**
      1. Add Sparkle as a Swift Package dependency to `Wikily.xcodeproj`.
      2. Generate a Sparkle EdDSA key pair (one-time, free, self-managed —
