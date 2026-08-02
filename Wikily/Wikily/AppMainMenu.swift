@@ -39,9 +39,14 @@ enum AppMainMenu {
     static func install(
         menuBar: MenuBarController,
         openSettings: @escaping () -> Void,
-        openOnboarding: @escaping () -> Void
+        openOnboarding: @escaping () -> Void,
+        checkForUpdates: @escaping () -> Void
     ) {
-        let actions = Actions(openSettings: openSettings, openOnboarding: openOnboarding)
+        let actions = Actions(
+            openSettings: openSettings,
+            openOnboarding: openOnboarding,
+            checkForUpdates: checkForUpdates
+        )
         Self.actions = actions
         Self.menuBar = menuBar
 
@@ -108,6 +113,9 @@ enum AppMainMenu {
         )
         menu.addItem(
             item("Setup Assistant…", #selector(Actions.openOnboarding), target: actions)
+        )
+        menu.addItem(
+            item("Check for Updates…", #selector(Actions.checkForUpdates), target: actions)
         )
         menu.addItem(.separator())
 
@@ -230,13 +238,20 @@ enum AppMainMenu {
     private final class Actions: NSObject {
         private let openSettingsHandler: () -> Void
         private let openOnboardingHandler: () -> Void
+        private let checkForUpdatesHandler: () -> Void
 
-        init(openSettings: @escaping () -> Void, openOnboarding: @escaping () -> Void) {
+        init(
+            openSettings: @escaping () -> Void,
+            openOnboarding: @escaping () -> Void,
+            checkForUpdates: @escaping () -> Void
+        ) {
             self.openSettingsHandler = openSettings
             self.openOnboardingHandler = openOnboarding
+            self.checkForUpdatesHandler = checkForUpdates
         }
 
         @objc func openSettings() { openSettingsHandler() }
         @objc func openOnboarding() { openOnboardingHandler() }
+        @objc func checkForUpdates() { checkForUpdatesHandler() }
     }
 }

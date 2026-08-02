@@ -107,20 +107,15 @@ first one.
        link — cleaner for a small known group) or the Mac App Store — both
        still require the same paid enrollment, so there's no cheaper tier
        that unlocks just one of them.
-   - **Concrete build steps, not yet started:**
-     1. Add Sparkle as a Swift Package dependency to `Wikily.xcodeproj`.
-     2. Generate a Sparkle EdDSA key pair (one-time, free, self-managed —
-        `generate_keys` tool ships with Sparkle).
-     3. Wire Sparkle's update-checker into the app (menu item + automatic
-        background check) and add its required Info.plist keys
-        (`SUFeedURL`, `SUPublicEDKey`).
-     4. New GitHub Actions workflow (replacing the paused `publish.yml`):
-        on a version tag push, `xcodebuild archive` → export a `.app` →
-        zip/dmg it → generate/update the Sparkle `appcast.xml` → publish
-        both to a new GitHub Release.
-     5. Add clear, visible "first time opening this? Right-click → Open"
-        instructions to the README's download section and/or the release
-        notes template.
+   - **Built (2026-08-02).** Sparkle is wired in (`WikilyApp.swift`,
+     `AppMainMenu.swift`'s "Check for Updates…" item, a Settings → General
+     toggle for automatic checks), `.github/workflows/release.yml` replaces
+     the deleted `publish.yml` (tag push → ad-hoc-signed archive → GitHub
+     Release → `appcast.xml` committed to `master`), and the README has a
+     Download section with the right-click → Open instructions. See
+     [`docs/RELEASING.md`](RELEASING.md) for how to actually cut a release —
+     not yet done: the first real tagged release, which is also the first
+     end-to-end proof this works.
 
 4. **Merge to `master`**, once 2–3 are done and 1 has had a real pass.
 

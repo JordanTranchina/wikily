@@ -21,5 +21,14 @@
 	-->
 	<key>com.apple.security.network.client</key>
 	<true/>
+
+	<!--
+	  Wikily ships ad-hoc signed (no paid Apple Developer Program enrollment),
+	  so it has no Team ID. Hardened Runtime's default Library Validation
+	  requires every loaded binary to share the main executable's Team ID or be
+	  signed by Apple, which would otherwise block loading Sparkle.framework.
+	-->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
 </dict>
 </plist>

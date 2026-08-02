@@ -1,3 +1,4 @@
+import Sparkle
 import SwiftUI
 
 /// Settings › General: startup behaviour and the recording permission.
@@ -9,6 +10,13 @@ import SwiftUI
 struct GeneralSettingsView: View {
 
     @Bindable var settings: AppSettings
+
+    /// Nil until `WikilyApp` finishes starting up. `SPUUpdater` is an
+    /// `NSObject`/KVO type, not `@Observable`, so its toggle below reads and
+    /// writes through a plain `Binding` rather than through `settings` —
+    /// Sparkle already persists this preference itself, and mirroring it into
+    /// `AppSettings` would just be a second, driftable copy of the same state.
+    let updater: SPUUpdater?
 
     /// Re-read on every appearance rather than observed. TCC changes happen in
     /// System Settings, in another process, with no notification to subscribe
@@ -34,6 +42,16 @@ struct GeneralSettingsView: View {
                             LaunchAtLogin.openLoginItemsSettings()
                         }
                     }
+                }
+
+                if let updater {
+                    Toggle(
+                        "Automatically check for updates",
+                        isOn: Binding(
+                            get: { updater.automaticallyChecksForUpdates },
+                            set: { updater.automaticallyChecksForUpdates = $0 }
+                        )
+                    )
                 }
             } header: {
                 Text("Startup")

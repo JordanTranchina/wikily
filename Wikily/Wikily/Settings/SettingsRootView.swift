@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 /// One pane of the settings window.
@@ -60,17 +61,19 @@ struct SettingsRootView: View {
 
     @Bindable private var settings: AppSettings
     private let tab: SettingsTab
+    private let updater: SPUUpdater?
 
-    init(settings: AppSettings = .shared, tab: SettingsTab = .general) {
+    init(settings: AppSettings = .shared, tab: SettingsTab = .general, updater: SPUUpdater? = nil) {
         _settings = Bindable(settings)
         self.tab = tab
+        self.updater = updater
     }
 
     var body: some View {
         Group {
             switch tab {
             case .general:
-                GeneralSettingsView(settings: settings)
+                GeneralSettingsView(settings: settings, updater: updater)
             case .knowledgeBase:
                 KnowledgeBaseSettingsView(settings: settings)
             case .model:

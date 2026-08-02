@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import Sparkle
 import SwiftUI
 
 /// Owns the settings window.
@@ -35,18 +36,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
     private var window: NSWindow?
     private var hosting: NSHostingController<SettingsRootView>?
     private let settings: AppSettings
+    private let updater: SPUUpdater?
 
     /// Which pane is showing. Persisted for the lifetime of the app rather than
     /// on disk — reopening Settings during one setup session should land where
     /// the user left off; across launches, General is the right answer again.
     private static var selectedTab: SettingsTab = .general
 
-    private init(settings: AppSettings) {
+    private init(settings: AppSettings, updater: SPUUpdater?) {
         self.settings = settings
+        self.updater = updater
     }
 
     /// Open the window, or bring it forward if it is already up.
-    static func present(settings: AppSettings = .shared) {
+    ///
+    /// - Parameter updater: nil when no updater exists yet — the General pane
+    ///   simply omits the "check for updates" toggle in that case, matching
+    ///   how the app behaves before `WikilyApp` has finished starting up.
+    static func present(settings: AppSettings = .shared, updater: SPUUpdater? = nil) {
         // An accessory app is never active on its own, so without this the
         // window opens behind the call the user is on and there is no Dock icon
         // to click to find it.
@@ -57,7 +64,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
             return
         }
 
-        let controller = SettingsWindowController(settings: settings)
+        let controller = SettingsWindowController(settings: settings, updater: updater)
         controller.build()
         current = controller
         logger.info("Settings window opened")
@@ -65,7 +72,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
 
     private func build() {
         let hosting = NSHostingController(
-            rootView: SettingsRootView(settings: settings, tab: Self.selectedTab)
+            rootView: SettingsRootView(settings: settings, tab: Self.selectedTab, updater: updater)
         )
         // The window's size is ours, not SwiftUI's. Left on the default
         // (`.preferredContentSize`), a `Form` reports an ideal width of ~0 and
@@ -133,7 +140,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
         Self.selectedTab = tab
         // The root view is replaced rather than the whole content controller, so
         // the window keeps its size and the swap doesn't flash.
-        hosting?.rootView = SettingsRootView(settings: settings, tab: tab)
+        hosting?.rootView = SettingsRootView(settings: settings, tab: tab, updater: updater)
         window?.toolbar?.selectedItemIdentifier = tab.itemIdentifier
         applyTitle()
     }

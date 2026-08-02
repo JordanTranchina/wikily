@@ -1,4 +1,5 @@
 import OSLog
+import Sparkle
 import SwiftUI
 
 /// Wikily — a local-first call companion.
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var session: CallSession?
     private var overlay: OverlayWindowController?
     private var menuBar: MenuBarController?
+    private var updaterController: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless diagnostics: run, report, exit without building UI.
@@ -185,16 +187,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let overlay = OverlayWindowController(session: session, settings: settings) { [weak self] in
             Task { await self?.stopListening() }
         }
-        let menuBar = MenuBarController(session: session, overlay: overlay)
+
+        // `startingUpdater: true` is what makes Sparkle actually perform
+        // background checks — without it nothing happens until
+        // `checkForUpdates(_:)` is called explicitly from the menu item below.
+        // Built before `menuBar` so its status-item Settings item can offer
+        // the same "check for updates" toggle as the app menu's.
+        let updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        let menuBar = MenuBarController(
+            session: session,
+            overlay: overlay,
+            updater: updaterController.updater
+        )
 
         self.session = session
         self.overlay = overlay
         self.menuBar = menuBar
+        self.updaterController = updaterController
 
         AppMainMenu.install(
             menuBar: menuBar,
-            openSettings: { SettingsWindowController.present(settings: settings) },
-            openOnboarding: { OnboardingWindowController.present(settings: settings) }
+            openSettings: {
+                SettingsWindowController.present(settings: settings, updater: updaterController.updater)
+            },
+            openOnboarding: { OnboardingWindowController.present(settings: settings) },
+            checkForUpdates: { updaterController.checkForUpdates(nil) }
         )
 
         if let vaultPath = OverlayPreview.requestedVaultPath() {

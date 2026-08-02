@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  GENERATE_INFOPLIST_FILE = YES synthesizes Info.plist from INFOPLIST_KEY_*
+	  build settings, but that mechanism only recognizes Apple's own well-known
+	  keys — arbitrary keys like Sparkle's are silently dropped, confirmed by a
+	  local build. Setting INFOPLIST_FILE alongside GENERATE_INFOPLIST_FILE
+	  merges this file's keys into the generated plist instead, which is what
+	  gets these two through.
+	-->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/JordanTranchina/wikily/master/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>vLWc5D36R1gSW1OzsVgKXz5O2zMjLJ9Dn3cYbz62ZSg=</string>
+</dict>
+</plist>

@@ -55,6 +55,20 @@ citations, and [`Product Spec Wikily.md`](Product%20Spec%20Wikily.md) for the pr
   sensitivity, overlay transparency and text size), Audio (input/output device selection).
 - **First-run onboarding**, so pointing Wikily at a wiki folder and picking a Q&A model doesn't
   require reading this file first.
+- **In-app updates** — Sparkle checks for new releases and installs them with no manual
+  re-download; see [Download](#download) above for the one-time first-install step.
+
+## Download
+
+Grab the latest build from [Releases](https://github.com/JordanTranchina/wikily/releases/latest).
+
+**First launch only:** macOS will warn that Wikily "cannot be verified" — this is
+expected (Wikily isn't notarized by Apple; see
+[`docs/NATIVE_REWRITE_ROADMAP.md`](docs/NATIVE_REWRITE_ROADMAP.md) for why). Right-click
+(or Control-click) `Wikily.app` and choose **Open**, then confirm in the dialog that
+appears. You only need to do this once — every update after that installs automatically
+in the background with no warning. See [`docs/RELEASING.md`](docs/RELEASING.md) if
+you're cutting a new release rather than downloading one.
 
 ## Building it
 

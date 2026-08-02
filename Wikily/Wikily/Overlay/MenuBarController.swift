@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import Sparkle
 
 /// The menu-bar item.
 ///
@@ -16,16 +17,19 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let session: CallSession
     private let overlay: OverlayWindowController
     private let settings: AppSettings
+    private let updater: SPUUpdater?
     private let statusItem: NSStatusItem
 
     init(
         session: CallSession,
         overlay: OverlayWindowController,
-        settings: AppSettings = .shared
+        settings: AppSettings = .shared,
+        updater: SPUUpdater? = nil
     ) {
         self.session = session
         self.overlay = overlay
         self.settings = settings
+        self.updater = updater
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -88,7 +92,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// points at it. Exposed so whatever assembles the app can take it over.
     func presentStartupWindow() {
         guard !OnboardingWindowController.presentIfNeeded(settings: settings) else { return }
-        SettingsWindowController.present(settings: settings)
+        SettingsWindowController.present(settings: settings, updater: updater)
     }
 
     private let logger = Logger(subsystem: "com.wikily.Wikily", category: "MenuBarController")
@@ -291,7 +295,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// reach a SwiftUI `Settings` scene and it silently does nothing here — see
     /// `SettingsWindowController` for the measurement and the reason.
     @objc private func openSettings() {
-        SettingsWindowController.present(settings: settings)
+        SettingsWindowController.present(settings: settings, updater: updater)
     }
 
     @objc private func openOnboarding() {
