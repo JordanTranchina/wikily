@@ -87,7 +87,20 @@ enum AudioObject {
         var values = [T](unsafeUninitializedCapacity: count) { _, initialized in
             initialized = count
         }
-        status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &values)
+        // `withUnsafeMutableBytes` rather than `&values`: the implicit
+        // array-to-pointer conversion the latter relies on makes the compiler
+        // warn here, since it has no static guarantee that a generic `T`
+        // excludes object references (every real call site uses a trivial
+        // type like `AudioObjectID`, but the warning is about the
+        // unconstrained generic itself). This is the documented, explicit
+        // way to hand a buffer's raw bytes to a C API instead.
+        status = values.withUnsafeMutableBytes { buffer in
+            // Force-unwrapped rather than threaded through as optional: a
+            // buffer this closure is handed always has a base address when
+            // its count is nonzero, which the `count > 0` guard above already
+            // established before `values` was even allocated.
+            AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, buffer.baseAddress!)
+        }
         guard status == noErr else {
             throw CoreAudioError(status: status, operation: operation)
         }

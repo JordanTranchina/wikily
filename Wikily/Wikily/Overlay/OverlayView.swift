@@ -221,7 +221,7 @@ struct OverlayView: View {
         if let blocker = document.blocker, !blocker.isEmpty {
             HStack(alignment: .top, spacing: 4) {
                 Text("❝").hudFont(13, weight: .bold).foregroundStyle(.tertiary)
-                (Text("Blocker: ").fontWeight(.semibold) + Text(blocker))
+                Text("\(Text("Blocker: ").fontWeight(.semibold))\(blocker)")
                     .hudFont(10)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
