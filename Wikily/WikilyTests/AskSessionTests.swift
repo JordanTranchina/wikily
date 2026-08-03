@@ -229,6 +229,28 @@ struct AskSessionTests {
         #expect(recorder.prompt?.contains(QuickAction.whatToSay.prompt) == true)
     }
 
+    /// The overlay's status icon shows a distinct "researching" animation only
+    /// while `.research` is the request actually in flight, not for every ask —
+    /// so `runningAction` has to be set before the stream starts (synchronously
+    /// checkable, like `draft` clearing) and cleared once it settles.
+    @Test func runningActionTracksWhichQuickActionIsInFlight() async {
+        let session = AskSession()
+        session.run(.research, page: page, transcript: [], service: StubService(deltas: ["ok"]))
+
+        #expect(session.runningAction == .research)
+        await settle()
+        #expect(session.runningAction == nil)
+    }
+
+    @Test func runningActionIsNilForAFreeFormAsk() async {
+        let session = AskSession()
+        session.ask("What's the status?", page: page, transcript: [], service: StubService(deltas: ["ok"]))
+
+        #expect(session.runningAction == nil)
+        await settle()
+        #expect(session.runningAction == nil)
+    }
+
     // MARK: - Failure handling
 
     @Test func aFailedAnswerSurfacesTheReasonAndLeavesNoEmptyBubble() async {

@@ -1,14 +1,18 @@
 # Native rewrite: merge readiness and next steps
 
-Status as of **2026-08-02**, `native-rewrite` branch. Written down so a future
+Status as of **2026-08-03**, `native-rewrite` branch. Written down so a future
 session (or a future you) can pick this up without re-deriving it.
 
 ## Where things stand
 
 - Phases 0–6 done: wiki engine, CoreAudio capture, on-device speech, the
   overlay HUD, model services, settings/onboarding/persistence, Ask Wikily.
-  242 tests passing across 23 suites (`xcodebuild test`).
-- This session: full AppKit menu bar with Quit in both the app menu and the
+  250 tests passing across 24 suites (`xcodebuild test`).
+- **2026-08-03: HUD rebuilt against the `Floating Assistant Widget.dc.html`
+  redesign** — see item 2, section C below for the acceptance criteria, and
+  the "still undecided" note for what didn't carry over (matched-document
+  detail display).
+- 2026-08-02: full AppKit menu bar with Quit in both the app menu and the
   Window menu, a fix for a real SwiftUI/AppKit bug that silently stripped the
   main menu down to nothing when the overlay's text field took focus,
   most-recent-build-wins process handling in Debug, a user-adjustable overlay
@@ -159,28 +163,39 @@ first one.
 
    #### C. HUD visual fidelity vs. the Claude Design wireframes
 
-   Setup: open the `Wikily Wireframes.dc.html` Claude Design project (the
-   WikiCard HUD screen) side by side with `Wikily --overlay-preview`, at
-   the default overlay-transparency and font-size settings.
+   Setup: open the `Floating Assistant Widget.dc.html` Claude Design project
+   (the toolbar+assist-panel HUD screen, project `Wikily screen wireframes`)
+   side by side with `Wikily --overlay-preview`, at the default
+   overlay-transparency and font-size settings.
 
-   - **C1 — Layout and information hierarchy match.**
-     Given the wireframe's expanded WikiCard state,
-     when the built HUD is showing a matched page in its expanded state,
-     then the title, status, latest update, blocker line, and action row
-     appear in the same order and rough proportions as the wireframe.
-   - **C2 — Brand color and match badge match.**
-     Given the wireframe's accent blue (`#3457d5`) and match-badge amber
-     (`#e0a83f`),
-     when the built HUD is compared at the same zoom level,
-     then `OverlayTheme.accent`/`OverlayTheme.matchBadge` read as the same
-     colors on screen, not a system-blue or a re-tinted approximation.
-   - **C3 — Collapsed pill vs. expanded card transition matches.**
-     Given the wireframe shows a collapsed pill state and an expanded card
-     state as distinct designs,
-     when the HUD is toggled between collapsed and expanded (via its own
-     collapse control),
-     then both states individually match their wireframe counterparts, not
-     just the expanded one.
+   *(Superseded 2026-08-02: the HUD was rebuilt against this newer wireframe,
+   replacing the card-based `Wikily Wireframes.dc.html` design the criteria
+   below used to reference — see the "still undecided" note after this
+   section for what didn't carry over.)*
+
+   - **C1 — Layout matches: always-on toolbar, togglable panel.**
+     Given the wireframe's "Active — shown" and "Collapsed — hidden" states,
+     when the built HUD is compared in both,
+     then the status icon, Hide/Show pill, and Stop button are always
+     visible in a toolbar strip, and the quick-actions/thread/input panel
+     appears below it only in the shown state — matching the wireframe's
+     two states, not the old collapsed-pill/expanded-card split.
+   - **C2 — Brand color and the five status-icon states match.**
+     Given the wireframe's accent blue (`#3457d5`), idle gray
+     (`oklch(55% 0.02 260)`), and ready amber (`#FFB81D`),
+     when each of `OverlayStatus`'s five states (idle, listening, thinking,
+     researching, ready) is driven up on the HUD,
+     then `OverlayTheme.accent`/`OverlayTheme.idleStatus`/
+     `OverlayTheme.matchBadge` read as the same colors as the wireframe, and
+     each state's glyph (zzz, equalizer bars, spinner, page-flip, lightbulb)
+     is visually distinct from the others at a glance.
+   - **C3 — Quick actions match the three-action design.**
+     Given the wireframe's row (What should I say? / Follow-up questions /
+     Research),
+     when the panel's quick-actions row is shown,
+     then exactly those three actions appear, in that order — not the
+     earlier four-action row (Fact-check/Recap are gone; Research carries
+     Fact-check's old prompt under the new name).
    - **C4 — Translucency reads correctly in both light and dark mode.**
      Given `OverlayMaterial` maps the Behavior-settings transparency slider
      to a native `Material` rather than the wireframe's literal CSS
@@ -189,14 +204,15 @@ first one.
      Settings' light and dark appearance,
      then the HUD reads as "the same product" in both — appropriately
      vibrant/translucent, not washed out or illegibly dark in either mode.
-   - **C5 — Font-size setting scales proportionally, not just the title.**
+   - **C5 — Font-size setting scales proportionally.**
      Given `AppSettings.overlayFontSize` is changed in Behavior settings
      (11–18pt),
      when the HUD is viewed at the smallest and largest settings,
      then every label scales together relative to the 12pt reference
-     (`OverlayTheme.referenceFontSize`) — status, quick actions, and chat
-     text grow with the title, nothing stays a fixed size while everything
-     else grows.
+     (`OverlayTheme.referenceFontSize`) — Hide/Show, quick actions, and chat
+     text all grow together, nothing stays a fixed size while everything
+     else grows (the toolbar's status-icon glyph is deliberately fixed-size,
+     same rationale as the old brand mark).
 
 3. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
    `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
@@ -207,9 +223,21 @@ first one.
 
 4. **Merge to `master`**, once 1–3 are done.
 
-## Two things flagged earlier, still undecided
+## Things flagged earlier, still undecided
 
 - `match_log` local engagement telemetry (original spec §7 relevance KPI) —
   dropped when the SQLite layer went; would come back as a small local JSONL
   file instead if wanted.
-- Nothing else outstanding from the Phase 6 notes.
+- **Matched-document detail display has no home since the 2026-08-02 toolbar
+  redesign.** The old HUD showed the matched page's title, status badge,
+  confidence score, "LATEST UPDATE"/"SUMMARY" panel, blocker line, and
+  action chips (Copy Status, Open Page, external links) — all of that came
+  out when `OverlayView` was rebuilt against `Floating Assistant Widget.dc.html`,
+  because that wireframe's panel is only quick-actions + chat input, with no
+  room shown for it. Jordan asked to drop it for now and revisit later,
+  rather than block the redesign on a placement decision. Also lost with it:
+  the per-match dismiss button (`xmark`, `session.dismissCurrentMatch()`) —
+  it lived next to the title that's now gone, and needs a new home too.
+  Nothing on the roadmap yet for where this content goes in the new toolbar
+  model (a third toolbar state? a tab in the panel? a hover/click on the
+  status icon?) — needs a design decision before it comes back.

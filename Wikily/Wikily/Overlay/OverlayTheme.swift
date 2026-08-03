@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Visual constants shared across the HUD, pulled from the Claude Design
-/// wireframes (`Wikily Wireframes.dc.html`, project `Wikily screen wireframes`)
-/// rather than invented to taste — the goal is that the built HUD and the
-/// mockup read as the same product.
+/// wireframes (project `Wikily screen wireframes`: `Wikily Wireframes.dc.html`
+/// for the original card design, `Floating Assistant Widget.dc.html` for the
+/// toolbar/status-icon redesign) rather than invented to taste — the goal is
+/// that the built HUD and the mockups read as the same product.
 enum OverlayTheme {
 
     /// The wireframe's `--accent`. Deliberately not `Color.accentColor`: that
@@ -12,10 +13,16 @@ enum OverlayTheme {
     /// settings — fine for a system control, wrong for a logo.
     static let accent = Color(red: 0x34 / 255, green: 0x57 / 255, blue: 0xd5 / 255)
 
-    /// The wireframe's amber badge color for an active suggestion (`#e0a83f`),
-    /// distinct from the idle brand mark so a matched card is recognisable at a
-    /// glance even collapsed to the pill.
-    static let matchBadge = Color(red: 0xe0 / 255, green: 0xa8 / 255, blue: 0x3f / 255)
+    /// The status icon's "ready" color (`#FFB81D`) — a page is matched and
+    /// waiting. From the "Floating assistant widget" wireframe
+    /// (`Floating Assistant Widget.dc.html`); supersedes the earlier
+    /// `Wikily Wireframes.dc.html` badge amber (`#e0a83f`) when that redesign
+    /// shipped.
+    static let matchBadge = Color(red: 0xff / 255, green: 0xb8 / 255, blue: 0x1d / 255)
+
+    /// The status icon's "idle" gray — approximates the wireframe's
+    /// `oklch(55% 0.02 260)`, a near-neutral gray with a faint cool cast.
+    static let idleStatus = Color(red: 0x6e / 255, green: 0x71 / 255, blue: 0x80 / 255)
 
     /// The header/title point size the HUD's other text sizes (9–14pt) were
     /// originally designed relative to. `AppSettings.overlayFontSize` is a

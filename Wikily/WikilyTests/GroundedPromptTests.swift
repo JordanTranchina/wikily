@@ -160,8 +160,8 @@ struct GroundedPromptTests {
 
     // MARK: - Quick actions
 
-    @Test func quickActionsMatchTheOriginalFourAndSendRicherPrompts() {
-        #expect(QuickAction.allCases.count == 4)
+    @Test func quickActionsMatchTheThreeActionDesignAndSendRicherPrompts() {
+        #expect(QuickAction.allCases.count == 3)
         #expect(QuickAction.whatToSay.title == "What should I say?")
 
         for action in QuickAction.allCases {
@@ -169,6 +169,6 @@ struct GroundedPromptTests {
             // sending the bare label would under-specify the request.
             #expect(action.prompt.count > action.title.count)
         }
-        #expect(QuickAction.factCheck.prompt.lowercased().contains("contradict"))
+        #expect(QuickAction.research.prompt.lowercased().contains("contradict"))
     }
 }

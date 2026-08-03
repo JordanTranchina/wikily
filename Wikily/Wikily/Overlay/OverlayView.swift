@@ -3,18 +3,18 @@ import SwiftUI
 
 /// The call HUD.
 ///
-/// A native re-cut of `src/components/WikiCard/index.tsx`, keeping that design's
-/// three states — listening pill, collapsed match pill, expanded card — and its
-/// information hierarchy (title, confidence, status, latest update, blocker,
-/// actions).
+/// A native re-cut of the Claude Design "Floating assistant widget" wireframe
+/// (`Floating Assistant Widget.dc.html`, project `Wikily screen wireframes`):
+/// an always-visible toolbar (status icon, Hide/Show, Stop) with a togglable
+/// assist panel below it holding the quick-action row, the Q&A thread, and the
+/// ask field. `OverlayStatus` drives the toolbar's status icon — listening,
+/// idle, thinking, researching, or ready — from the session's published state.
 ///
-/// Visual language matches the Claude Design wireframes (`Wikily Wireframes.dc.html`,
-/// project `Wikily screen wireframes`) rather than the Tauri build: the brand
-/// blue and the matched-page amber badge come from `OverlayTheme`, chip vs.
-/// plain-text styling distinguishes page actions (Copy Status, Open Page) from
-/// quick-ask questions (What should I say?, Recap), and the card's translucency
-/// follows the user's Behavior-settings slider through `OverlayMaterial` rather
-/// than a fixed material.
+/// Supersedes the earlier `Wikily Wireframes.dc.html` card design, which put
+/// the matched page's title/status/summary/blocker/links directly on the HUD.
+/// That content has no home in this redesign yet — Jordan asked to drop it for
+/// now and revisit once the toolbar+panel model is settled (so does the
+/// dismiss-current-match affordance, which lived next to that title).
 ///
 struct OverlayView: View {
 
@@ -24,26 +24,13 @@ struct OverlayView: View {
     var onHeightChange: (CGFloat) -> Void
 
     @State private var isCollapsed = false
-    @State private var didCopy = false
 
     /// Whether the ask field holds the keyboard. Tracked so Escape can hand it
     /// back to the call, and so the field can show that it has it.
     @FocusState private var isAskFocused: Bool
 
-    private var document: WikiDocument? { session.currentMatch?.document }
-
-    /// Says what the session is actually doing. `.starting` gets its own line
-    /// because permission checks and device setup take a noticeable moment, and
-    /// during it the HUD previously claimed to be listening already.
-    private var listeningLine: String {
-        switch session.phase {
-        case .idle: "Wikily isn't listening"
-        case .starting: "Starting…"
-        case .listening: "Wikily is listening"
-        }
-    }
-
     private var ask: AskSession { session.askSession }
+    private var status: OverlayStatus { OverlayStatus(session: session) }
 
     /// `ask` is a computed property, so `$ask.draft` doesn't exist. The session
     /// owns the draft deliberately — clearing it on send belongs in one place.
@@ -52,11 +39,10 @@ struct OverlayView: View {
     }
 
     var body: some View {
-        Group {
-            if isCollapsed {
-                collapsedPill
-            } else {
-                expandedCard
+        VStack(spacing: 10) {
+            toolbar
+            if !isCollapsed {
+                panel
             }
         }
         .hudFont(12)
@@ -71,49 +57,42 @@ struct OverlayView: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.easeOut(duration: 0.18), value: session.currentMatch)
+        .animation(.easeOut(duration: 0.18), value: status)
         .animation(.easeOut(duration: 0.18), value: isCollapsed)
         .environment(\.overlayFontSize, CGFloat(settings.overlayFontSize))
     }
 
-    // MARK: - Collapsed
+    // MARK: - Toolbar
 
-    private var collapsedPill: some View {
+    /// The wireframe's `.fw-toolbar`: a status icon, the Hide/Show pill, and
+    /// Stop, always on screen regardless of whether the panel is showing.
+    private var toolbar: some View {
         HStack(spacing: 8) {
-            if let document {
-                MatchBadge(size: 20)
-                Text(document.title)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .help(document.title)
-                if let score = session.currentMatch?.score {
-                    ConfidenceBadge(score: score)
-                }
-            } else {
-                WikilyMark(size: 20)
-                Text(listeningLine)
-                    .fontWeight(.medium)
-                PulsingDot(isListening: session.isListening, isActive: session.isSpeechActive)
-            }
-
-            HUDIconButton("chevron.down", help: "Show") { isCollapsed = false }
-            Divider().frame(height: 12)
+            StatusIcon(status: status, size: 28)
+            HideShowButton(isCollapsed: isCollapsed) { isCollapsed.toggle() }
+            Spacer(minLength: 4)
             HUDIconButton("stop.fill", help: "Stop listening", role: .destructive, action: onStop)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(6)
         .background(OverlayMaterial.material(for: settings.overlayOpacity), in: Capsule())
         .overlay(Capsule().strokeBorder(.primary.opacity(0.12)))
         .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Expanded
+    // MARK: - Assist panel
 
-    private var expandedCard: some View {
+    /// The wireframe's `.fw-panel`: quick actions, the answer thread, and the
+    /// ask field. Shown only while `isCollapsed` is false.
+    ///
+    /// The text field is the only control here that takes keyboard focus. The
+    /// panel is `.nonactivatingPanel` with `becomesKeyOnlyIfNeeded`, so clicking
+    /// a *button* steals nothing, and only clicking into the field routes
+    /// keystrokes away from the call. Escape hands them straight back — that is
+    /// the whole mitigation for typing during a live call, so it matters more
+    /// than it looks.
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header
-
             if let message = session.errorMessage {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .hudFont(11)
@@ -121,20 +100,44 @@ struct OverlayView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let document {
-                suggestion(document)
-            } else {
-                Text(
-                    session.isListening
-                        ? "Keep talking — Wikily will surface a page here when something in your wiki matches."
-                        : "Wikily isn't listening. Start a session from the menu bar, and pages will appear here as you talk."
-                )
-                .hudFont(11)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Plain icon-and-label items with dot separators, not filled chips —
+            // these are a running row of *questions to ask*, not results to act
+            // on.
+            WrapLayout(spacing: 7) {
+                ForEach(Array(QuickAction.allCases.enumerated()), id: \.offset) { index, action in
+                    if index > 0 {
+                        Circle()
+                            .fill(.secondary.opacity(0.35))
+                            .frame(width: 3, height: 3)
+                    }
+                    HUDInlineAction(title: action.title, systemImage: action.systemImage) {
+                        session.run(action)
+                    }
+                    .disabled(ask.isAnswering)
+                }
             }
 
-            askSection
+            if !ask.messages.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(ask.messages) { message in
+                        askBubble(message)
+                    }
+                    if ask.isAnswering {
+                        Text("Thinking…")
+                            .hudFont(10)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+
+            if let message = ask.errorMessage {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .hudFont(10)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            askInputRow
         }
         .padding(12)
         .background(
@@ -148,166 +151,9 @@ struct OverlayView: View {
         .shadow(color: .black.opacity(0.28), radius: 14, y: 4)
     }
 
-    private var header: some View {
-        HStack(spacing: 7) {
-            if let document {
-                MatchBadge(size: 20)
-                Text(document.title)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .help(document.title)
-                if let score = session.currentMatch?.score {
-                    ConfidenceBadge(score: score)
-                }
-            } else {
-                WikilyMark(size: 20)
-                Text("Wikily")
-                    .fontWeight(.semibold)
-                PulsingDot(isListening: session.isListening, isActive: session.isSpeechActive)
-            }
-
-            Spacer(minLength: 4)
-
-            HUDIconButton("chevron.up", help: "Hide") { isCollapsed = true }
-            Divider().frame(height: 12)
-            HUDIconButton("stop.fill", help: "Stop listening", role: .destructive, action: onStop)
-            if document != nil {
-                HUDIconButton("xmark", help: "Dismiss suggestion") {
-                    session.dismissCurrentMatch()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func suggestion(_ document: WikiDocument) -> some View {
-        if let status = document.status, !status.isEmpty {
-            HStack(spacing: 6) {
-                Text("Status:")
-                    .hudFont(10)
-                    .foregroundStyle(.secondary)
-                Text(status)
-                    .hudFont(10, weight: .semibold)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.primary.opacity(0.1), in: Capsule())
-            }
-        }
-
-        let detail = document.latestUpdate ?? document.summary
-        if !detail.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(document.latestUpdate != nil ? "LATEST UPDATE" : "SUMMARY")
-                    .hudFont(9, weight: .semibold)
-                    .tracking(0.4)
-                    .foregroundStyle(OverlayTheme.accent.opacity(0.75))
-                Text(detail)
-                    .hudFont(11.5, weight: .medium)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(OverlayTheme.accent.opacity(0.1))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(OverlayTheme.accent.opacity(0.22))
-            )
-        }
-
-        if let blocker = document.blocker, !blocker.isEmpty {
-            HStack(alignment: .top, spacing: 4) {
-                Text("❝").hudFont(13, weight: .bold).foregroundStyle(.tertiary)
-                Text("\(Text("Blocker: ").fontWeight(.semibold))\(blocker)")
-                    .hudFont(10)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-
-        // `WrapLayout` rather than an HStack: two external links plus the two
-        // fixed actions overflow 340pt often enough that clipping would be the
-        // normal case, not the edge case.
-        WrapLayout(spacing: 6) {
-            HUDActionButton(
-                title: didCopy ? "Copied" : "Copy Status",
-                systemImage: didCopy ? "checkmark" : "doc.on.doc"
-            ) {
-                copyStatus(document)
-            }
-
-            HUDActionButton(title: "Open Page", systemImage: "doc.text") {
-                NSWorkspace.shared.open(URL(fileURLWithPath: document.id))
-            }
-
-            ForEach(document.links.prefix(2), id: \.url) { link in
-                HUDActionButton(title: truncated(link.label), systemImage: "arrow.up.right.square") {
-                    if let url = URL(string: link.url) {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .help(link.url)
-            }
-        }
-    }
-
-    // MARK: - Ask Wikily
-
-    /// Quick actions, the answer thread, and the ask field.
-    ///
-    /// The text field is the only control here that takes keyboard focus. The
-    /// panel is `.nonactivatingPanel` with `becomesKeyOnlyIfNeeded`, so clicking
-    /// a *button* steals nothing, and only clicking into the field routes
-    /// keystrokes away from the call. Escape hands them straight back — that is
-    /// the whole mitigation for typing during a live call, so it matters more
-    /// than it looks.
-    @ViewBuilder
-    private var askSection: some View {
-        Divider().opacity(0.5)
-
-        // Plain icon-and-label items with dot separators, not filled chips —
-        // these are a running row of *questions to ask*, not results to act on
-        // the way the page's own actions (Copy Status, Open Page) are. Keeping
-        // them visually quieter is what tells them apart at a glance.
-        WrapLayout(spacing: 7) {
-            ForEach(Array(QuickAction.allCases.enumerated()), id: \.offset) { index, action in
-                if index > 0 {
-                    Circle()
-                        .fill(.secondary.opacity(0.35))
-                        .frame(width: 3, height: 3)
-                }
-                HUDInlineAction(title: action.title, systemImage: action.systemImage) {
-                    session.run(action)
-                }
-                .disabled(ask.isAnswering)
-            }
-        }
-
-        if !ask.messages.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(ask.messages) { message in
-                    askBubble(message)
-                }
-                if ask.isAnswering {
-                    Text("Thinking…")
-                        .hudFont(10)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-
-        if let message = ask.errorMessage {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .hudFont(10)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-
+    private var askInputRow: some View {
         HStack(spacing: 6) {
-            TextField("Ask Wikily…", text: askDraft)
+            TextField("Ask for what to say next…", text: askDraft)
                 .textFieldStyle(.plain)
                 .hudFont(11)
                 .focused($isAskFocused)
@@ -389,35 +235,11 @@ struct OverlayView: View {
             }
         }
     }
-
-    // MARK: - Actions
-
-    /// The copy blob from the Tauri card: title, then whichever of status,
-    /// latest update and blocker exist — what a rep pastes into the call chat.
-    private func copyStatus(_ document: WikiDocument) {
-        var lines = [document.title]
-        if let status = document.status, !status.isEmpty { lines.append("Status: \(status)") }
-        if let latest = document.latestUpdate, !latest.isEmpty { lines.append("Latest: \(latest)") }
-        if let blocker = document.blocker, !blocker.isEmpty { lines.append("Blocker: \(blocker)") }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(lines.joined(separator: "\n"), forType: .string)
-
-        didCopy = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            didCopy = false
-        }
-    }
-
-    private func truncated(_ label: String) -> String {
-        label.count > 18 ? label.prefix(18) + "…" : label
-    }
 }
 
 // MARK: - Pieces
 
+/// The brand mark, used as the assistant's chat-bubble avatar.
 private struct WikilyMark: View {
     var size: CGFloat
 
@@ -430,69 +252,155 @@ private struct WikilyMark: View {
     }
 }
 
-/// The amber badge shown in place of `WikilyMark` while a page is matched —
-/// the wireframe's lightbulb-in-a-circle, so a glance at the collapsed pill
-/// tells "idle" (blue W) from "found something" (amber bulb) without reading
-/// the title next to it.
-private struct MatchBadge: View {
-    var size: CGFloat
+/// The toolbar's status indicator — the wireframe's five-state icon (listening,
+/// idle, thinking, researching, ready). Not a control: a glance at its color
+/// and glyph says what Wikily is doing right now, replacing the old pulsing-dot
+/// + brand-mark pairing.
+private struct StatusIcon: View {
+    let status: OverlayStatus
+    let size: CGFloat
 
     var body: some View {
-        Image(systemName: "lightbulb.fill")
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(OverlayTheme.matchBadge, in: Circle())
+        ZStack {
+            Circle().fill(fill)
+            glyph
+        }
+        .frame(width: size, height: size)
+        .help(help)
+    }
+
+    private var fill: Color {
+        switch status {
+        case .idle: OverlayTheme.idleStatus
+        case .listening, .thinking, .researching: OverlayTheme.accent
+        case .ready: OverlayTheme.matchBadge
+        }
+    }
+
+    private var help: String {
+        switch status {
+        case .idle: "Wikily isn't listening"
+        case .listening: "Wikily is listening"
+        case .thinking: "Thinking…"
+        case .researching: "Researching…"
+        case .ready: "A page matched"
+        }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch status {
+        case .listening:
+            EqualizerGlyph(size: size)
+        case .idle:
+            Image(systemName: "zzz")
+                .font(.system(size: size * 0.4, weight: .bold))
+                .foregroundStyle(.white)
+        case .thinking:
+            SpinnerGlyph(size: size)
+        case .researching:
+            PageFlipGlyph(size: size)
+        case .ready:
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: size * 0.4, weight: .semibold))
+                .foregroundStyle(.white)
+        }
     }
 }
 
-private struct ConfidenceBadge: View {
-    var score: Double
+/// Three bars pulsing at staggered offsets while Wikily is listening — the
+/// wireframe's animated equalizer glyph.
+private struct EqualizerGlyph: View {
+    let size: CGFloat
+    @State private var isTall = false
+
+    /// Short/tall/medium, matching the wireframe's three bar lengths.
+    private let relativeHeights: [CGFloat] = [0.32, 0.58, 0.44]
+    private let delays: [Double] = [0, 0.15, 0.3]
 
     var body: some View {
-        Text("\(Int((score * 100).rounded()))%")
-            .hudFont(9, weight: .semibold)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(OverlayTheme.accent)
-            .background(OverlayTheme.accent.opacity(0.12), in: Capsule())
-            .help("Match confidence")
+        HStack(spacing: size * 0.09) {
+            ForEach(0..<3, id: \.self) { index in
+                Capsule()
+                    .fill(.white)
+                    .frame(width: size * 0.11, height: size * relativeHeights[index])
+                    .scaleEffect(y: isTall ? 1 : 0.45, anchor: .center)
+                    .animation(
+                        .easeInOut(duration: 0.9).repeatForever(autoreverses: true).delay(delays[index]),
+                        value: isTall
+                    )
+            }
+        }
+        .onAppear { isTall = true }
     }
 }
 
-/// The listening indicator. Pulses continuously so a silent stretch of call
-/// still reads as "running", and brightens while the VAD hears speech.
-///
-/// `isListening` is not decoration. This dot was green and pulsing whenever the
-/// HUD was on screen, including with the session idle, so the panel asserted
-/// that Wikily was hearing the call when it was not — the one thing this cue
-/// exists to tell the truth about, and the reason Stop looked like it had failed.
-private struct PulsingDot: View {
-    var isListening: Bool
-    var isActive: Bool
-    @State private var isPulsing = false
+/// A rotating arc while an answer is generating — the wireframe's spinner.
+private struct SpinnerGlyph: View {
+    let size: CGFloat
+    @State private var isRotating = false
 
     var body: some View {
         Circle()
-            .fill(isListening ? Color.green : Color.secondary)
-            .frame(width: 8, height: 8)
-            .overlay {
-                Circle()
-                    .stroke(.green, lineWidth: 1)
-                    .scaleEffect(isPulsing && isListening ? 2.2 : 1)
-                    .opacity(isPulsing && isListening ? 0 : 0.7)
-                    .opacity(isListening ? 1 : 0)
-            }
-            .opacity(isListening ? (isActive ? 1 : 0.65) : 0.5)
-            .animation(.easeInOut(duration: 1).repeatForever(autoreverses: false), value: isPulsing)
-            .onAppear { isPulsing = true }
+            .trim(from: 0.08, to: 0.6)
+            .stroke(.white, style: StrokeStyle(lineWidth: max(size * 0.09, 1.5), lineCap: .round))
+            .frame(width: size * 0.5, height: size * 0.5)
+            .rotationEffect(.degrees(isRotating ? 360 : 0))
+            .animation(.linear(duration: 1.1).repeatForever(autoreverses: false), value: isRotating)
+            .onAppear { isRotating = true }
     }
 }
 
-/// A control circle — Stop, Hide/Show, Dismiss — matching the wireframe's
-/// `.top-pill-stop`/`.ctrl`: a subtly-filled circle at rest, not a bare glyph.
-/// The fill is what reads as "this is a button" at HUD scale, where a plain
-/// icon with only a hover-tint is easy to miss entirely.
+/// An open book flipping in 3D while Research runs — distinct from the generic
+/// spinner so a running Research request reads differently from any other
+/// in-flight ask.
+private struct PageFlipGlyph: View {
+    let size: CGFloat
+    @State private var isFlipped = false
+
+    var body: some View {
+        Image(systemName: "book.pages")
+            .font(.system(size: size * 0.42, weight: .medium))
+            .foregroundStyle(.white)
+            .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: isFlipped)
+            .onAppear { isFlipped = true }
+    }
+}
+
+/// The wireframe's `.fw-hide-btn`: a pill with a chevron and a text label,
+/// toggling whether the assist panel below the toolbar is shown. The chevron
+/// direction matches the panel's next move — up while showing (pressing folds
+/// it away), down while collapsed (pressing brings it back).
+private struct HideShowButton: View {
+    let isCollapsed: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label(
+                isCollapsed ? "Show" : "Hide",
+                systemImage: isCollapsed ? "chevron.down" : "chevron.up"
+            )
+            .hudFont(11, weight: .semibold)
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(isHovering ? Color.primary.opacity(0.12) : Color.primary.opacity(0.07)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .onHover { isHovering = $0 }
+    }
+}
+
+/// A control circle — Stop, Send, Stop-answering, Clear — matching the
+/// wireframe's `.fw-circle-btn`: a subtly-filled circle at rest, not a bare
+/// glyph. The fill is what reads as "this is a button" at HUD scale, where a
+/// plain icon with only a hover-tint is easy to miss entirely.
 private struct HUDIconButton: View {
     let symbol: String
     let help: String
@@ -547,39 +455,9 @@ private struct HUDIconButton: View {
     }
 }
 
-/// A bordered pill for an action with a concrete result — Copy Status, Open
-/// Page, an external link. Matches the wireframe's `.chip`: outlined, not
-/// filled, so it reads as a distinct affordance from the plain-text quick-ask
-/// items in `HUDInlineAction`.
-private struct HUDActionButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .hudFont(10, weight: .semibold)
-                .labelStyle(.titleAndIcon)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule().fill(isHovering ? OverlayTheme.accent.opacity(0.1) : .primary.opacity(0.03))
-                )
-                .overlay(Capsule().strokeBorder(.primary.opacity(0.16)))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isHovering ? OverlayTheme.accent : .primary)
-        .onHover { isHovering = $0 }
-    }
-}
-
 /// One item in the quick-ask row — icon and label only, no fill or border.
-/// The wireframe's `.act-item`: these are questions to ask, not results to act
-/// on, so they read quieter than `HUDActionButton`'s chips.
+/// The wireframe's `.fw-action`: these are questions to ask, not results to act
+/// on, so they read quieter than a filled chip would.
 private struct HUDInlineAction: View {
     let title: String
     let systemImage: String

@@ -32,6 +32,13 @@ final class AskSession {
     private(set) var isAnswering = false
     private(set) var errorMessage: String?
 
+    /// Which quick action is driving the in-flight answer, or `nil` for a
+    /// free-form question. The overlay's status icon reads this to show the
+    /// wireframe's distinct "researching" animation only while a `.research`
+    /// request is actually running, rather than lumping every in-flight ask
+    /// under one generic "thinking" spinner.
+    private(set) var runningAction: QuickAction?
+
     /// Bound to the text field. Owned here so clearing on send is one place.
     var draft: String = ""
 
@@ -73,7 +80,14 @@ final class AskSession {
         transcript: [TranscriptSegment],
         service: some LanguageModelService
     ) {
-        ask(action.prompt, displayAs: action.title, page: page, transcript: transcript, service: service)
+        ask(
+            action.prompt,
+            displayAs: action.title,
+            action: action,
+            page: page,
+            transcript: transcript,
+            service: service
+        )
     }
 
     /// Ask a question and stream the answer into the thread.
@@ -81,9 +95,13 @@ final class AskSession {
     /// - Parameter displayAs: what to show as the user's turn, when the prompt
     ///   actually sent is more verbose than what the user clicked. Showing the
     ///   full internal prompt back to them would be noise.
+    /// - Parameter action: the quick action that triggered this ask, if any —
+    ///   `nil` for a free-form question typed into the field. Recorded as
+    ///   `runningAction` for the overlay's status icon.
     func ask(
         _ question: String,
         displayAs displayText: String? = nil,
+        action: QuickAction? = nil,
         page: WikiDocument?,
         transcript: [TranscriptSegment],
         service: some LanguageModelService
@@ -92,6 +110,7 @@ final class AskSession {
         // has already stopped being what the user wants.
         task?.cancel()
         errorMessage = nil
+        runningAction = action
 
         append(Message(role: .user, text: displayText ?? question))
 
@@ -109,6 +128,7 @@ final class AskSession {
                 text: "Nothing to go on yet — no page has matched and nothing has been "
                     + "transcribed. Start listening, or open a page first."
             ))
+            runningAction = nil
             return
         }
 
@@ -148,6 +168,7 @@ final class AskSession {
         task?.cancel()
         task = nil
         isAnswering = false
+        runningAction = nil
     }
 
     func clear() {
@@ -180,11 +201,13 @@ final class AskSession {
         messages[index].text = String(messages[index].text.prefix(Self.maximumAnswerCharacters))
             + "…\n\n[Stopped — this answer was running far longer than expected.]"
         isAnswering = false
+        runningAction = nil
         return false
     }
 
     private func finishAnswer(_ id: UUID) {
         isAnswering = false
+        runningAction = nil
         // An empty answer is a failure the user can otherwise only read as the
         // app having ignored them.
         guard let index = messages.firstIndex(where: { $0.id == id }),
@@ -195,6 +218,7 @@ final class AskSession {
 
     private func failAnswer(_ id: UUID, with error: Error) {
         isAnswering = false
+        runningAction = nil
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         errorMessage = message
         logger.error("Ask failed: \(message, privacy: .public)")

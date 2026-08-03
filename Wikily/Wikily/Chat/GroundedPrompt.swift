@@ -154,13 +154,15 @@ enum GroundedPrompt {
 /// The fixed prompts offered as one-click buttons on the card.
 ///
 /// Fixed rather than user-editable by decision: an editor is a settings page for
-/// something most people never touch. Carried over from the Tauri build's
-/// `DEFAULT_QUICK_ACTIONS`, which these match.
+/// something most people never touch. Three actions, matching the Claude Design
+/// "Floating assistant widget" wireframe (`Floating Assistant Widget.dc.html`,
+/// project `Wikily screen wireframes`) — narrowed from the original four
+/// (Fact-check renamed to Research with the same prompt; Recap dropped) when
+/// that redesign shipped.
 enum QuickAction: String, CaseIterable, Identifiable, Sendable {
     case whatToSay = "What should I say?"
     case followUp = "Follow-up questions"
-    case factCheck = "Fact-check"
-    case recap = "Recap"
+    case research = "Research"
 
     var id: String { rawValue }
 
@@ -170,8 +172,7 @@ enum QuickAction: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .whatToSay: "text.bubble"
         case .followUp: "questionmark.circle"
-        case .factCheck: "checkmark.shield"
-        case .recap: "list.bullet"
+        case .research: "globe"
         }
     }
 
@@ -190,10 +191,8 @@ enum QuickAction: String, CaseIterable, Identifiable, Sendable {
             "What should I say next?"
         case .followUp:
             "What follow-up questions should I ask next?"
-        case .factCheck:
+        case .research:
             "Does anything said in the call so far contradict the wiki page? Quote the specific conflict, or say nothing conflicts."
-        case .recap:
-            "Recap the call so far in a few bullet points."
         }
     }
 }
