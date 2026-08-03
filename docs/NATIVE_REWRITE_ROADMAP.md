@@ -8,6 +8,21 @@ session (or a future you) can pick this up without re-deriving it.
 - Phases 0–6 done: wiki engine, CoreAudio capture, on-device speech, the
   overlay HUD, model services, settings/onboarding/persistence, Ask Wikily.
   250 tests passing across 24 suites (`xcodebuild test`).
+- **2026-08-03: Phase 7 done — the Tauri/React app is deleted.** `src/`,
+  `src-tauri/` (including 10GB of gitignored Rust build artifacts on disk —
+  `target/`, `gen/`, the bundled whisper.cpp binary), `package.json`,
+  `package-lock.json`, `dist/`, `coverage/`, `node_modules/`, `vite.config.ts`,
+  `vitest.config.ts`, `tsconfig*.json`, `components.json`, `.npmrc`,
+  `.vscode/` (recommended the Tauri/Rust VS Code extensions), `index.html`,
+  `images/app-image.png` (the old Pluely banner), and `scripts/` (all four
+  scripts were Tauri-dev or whisper-sidecar tooling, both gone). Also
+  cleaned up what referenced those files: `.gitignore`'s npm/yarn/pnpm-log
+  and node_modules/dist/coverage entries, `ci.yml`'s `frontend` and `rust`
+  jobs (only `swift` remains — and the native-rewrite-specific push trigger
+  came out too, since the open PR's `pull_request` event already covers
+  pushes to this branch), and the README's repo-layout section. `native-rewrite`
+  is no longer purely additive against `master`. Verified: full
+  `xcodebuild test` still passes (250/24) after the deletion.
 - **2026-08-03: HUD rebuilt against the `Floating Assistant Widget.dc.html`
   redesign** — see item 2, section C below for the acceptance criteria, and
   the "still undecided" note for what didn't carry over (matched-document
@@ -28,12 +43,13 @@ session (or a future you) can pick this up without re-deriving it.
 
 ## Not ready to merge into `master` yet
 
-The core reason: **`native-rewrite` is purely additive.** `git diff
-master...native-rewrite` is 14,000+ insertions and zero deletions — the old
-Tauri/TypeScript app (`src/`, `src-tauri/`, `package.json`, `dist/`, ...) is
-still fully intact and untouched in this branch. Merging today wouldn't
-complete the rewrite, it would just add a second app living next to the
-first one.
+**Phase 7 (delete the Tauri app) is done** — as of 2026-08-03, `native-rewrite`
+is no longer purely additive; the old Tauri/TypeScript app is gone from this
+branch (see item 2 below for exactly what went, and what still needs
+`master`-side cleanup once merged). What's left before merging isn't a
+structural blocker anymore, just unverified claims: the Sparkle release
+pipeline has never actually run in CI, and the hands-on acceptance criteria
+below have never been exercised against the real app.
 
 ## Next steps, roughly in order
 
@@ -214,14 +230,7 @@ first one.
      else grows (the toolbar's status-icon glyph is deliberately fixed-size,
      same rationale as the old brand mark).
 
-3. **Phase 7: delete the Tauri app**, as its own clean commit — `src/`,
-   `src-tauri/`, `package.json`, `package-lock.json`, `dist/`, `coverage/`,
-   `vite.config.ts`, `vitest.config.ts`, `tsconfig*.json`, `components.json`,
-   `.npmrc`, `.vscode/` if Tauri-specific. Cross-check `.gitignore` afterward
-   — several entries (`node_modules`, `dist`, `coverage`) exist only for the
-   Tauri app and can go too.
-
-4. **Merge to `master`**, once 1–3 are done.
+3. **Merge to `master`**, once 1–2 are done.
 
 ## Things flagged earlier, still undecided
 

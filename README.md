@@ -4,11 +4,11 @@ A local-first macOS overlay that proactively surfaces the right page from your o
 wiki while you're on a call — no cloud, no manual search, nothing leaves your Mac.
 
 > **Status:** the native macOS app described below is being built on the `native-rewrite` branch
-> and is not yet merged to `master`. This repository currently also contains an earlier,
-> unrelated Tauri/React prototype (`src/`, `src-tauri/`) that predates this direction and is
-> being removed — see [`docs/NATIVE_REWRITE_ROADMAP.md`](docs/NATIVE_REWRITE_ROADMAP.md) for
-> where that stands. If you're reading this from `master`, some of what's below may not be there
-> yet; check that branch.
+> and is not yet merged to `master`. The earlier, unrelated Tauri/React prototype that used to
+> live here (`src/`, `src-tauri/`) predated this direction and has been removed — see
+> [`docs/NATIVE_REWRITE_ROADMAP.md`](docs/NATIVE_REWRITE_ROADMAP.md) for where things stand. If
+> you're reading this from `master`, some of what's below may not be there yet; check that
+> branch.
 
 ## What it does
 
@@ -116,7 +116,6 @@ Wikily/                  the native macOS app (Xcode project, Swift/AppKit/Swift
 docs/                    developer docs (local transcription, the native-rewrite roadmap)
 Product Spec Wikily.md   product spec — personas, workflow, KPIs, monetization thinking
 Tech Spec Wikily.md      technical spec — architecture, file citations, performance
-src/, src-tauri/         legacy Tauri/React app, being removed — see the roadmap doc
 ```
 
 ## Contributing
