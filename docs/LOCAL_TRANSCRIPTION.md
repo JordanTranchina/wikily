@@ -1,151 +1,77 @@
 # Local (on-device) transcription
 
-Wikily is **local-first**: by default it transcribes call audio on-device with
-[whisper.cpp](https://github.com/ggerganov/whisper.cpp) so that no audio or
-transcript ever leaves the machine (Tech Spec §4.2 / §5.4 / §9). Cloud speech
-providers are a strictly opt-in fallback.
+> **This doc describes the native macOS app** (`Wikily/`, the `native-rewrite`
+> branch). It previously described a `whisper.cpp` sidecar bundled into the
+> old Tauri app — that plan was scaffolded but never shipped. The native
+> rewrite replaced it with Apple's own on-device Speech framework, which
+> turned out to need none of the bundling/signing machinery this doc used to
+> walk through. See `docs/NATIVE_REWRITE_ROADMAP.md` for where the rewrite
+> stands overall.
 
-This doc covers how to enable local transcription today, and the remaining work
-to ship it fully bundled.
+Wikily is **local-first**: it transcribes call audio entirely on-device with
+Apple's `SpeechAnalyzer` / `SpeechTranscriber` APIs (the `Speech` framework),
+so no audio or transcript ever leaves the machine. There is no cloud fallback
+and no "opt in to send audio to a server" path — Wikily doesn't have a cloud
+speech provider at all. That's a real product decision, not a current
+limitation: transcript content and wiki content can be sensitive, and the
+whole design assumes it never has to leave the Mac.
 
 ## How it works
 
-- `useSystemAudio` reads the transcription mode from settings
-  (`WIKILY_TRANSCRIPTION_MODE`, default `local`). In **On-device** mode each
-  VAD-gated WAV utterance is sent to the Rust command
-  `transcribe_local` (`src-tauri/src/transcribe.rs`), which runs the
-  whisper.cpp `whisper-cli` sidecar and returns text.
-- If no local model/binary is installed, `transcribe_local` returns a typed
-  `LOCAL_TRANSCRIPTION_UNAVAILABLE` error. The frontend then falls back to the
-  configured **cloud** speech provider — but only if you've explicitly set one
-  up (§6). Otherwise it prompts you to finish local setup. Nothing crashes.
+- `Wikily/Wikily/Transcription/SpeechAnalyzerTranscriber.swift` streams
+  VAD-gated audio chunks into `SpeechAnalyzer`/`SpeechTranscriber` and gets
+  back live, speaker-tagged transcript segments — no external process, no
+  sidecar binary, no network call once the model is installed.
+- The on-device model for a given language has to be downloaded once before
+  it can be used — `Wikily/Wikily/Transcription/SpeechModelInstaller.swift`
+  wraps Apple's `AssetInventory` API for this: it resolves the best matching
+  locale for the user's system language, reports whether that locale's model
+  is `.notInstalled` / `.downloading(fraction:)` / `.installed`, and drives
+  the download with live progress. This is the **one moment in Wikily's
+  lifetime that needs the network** — after it completes, transcription works
+  fully offline.
+- `SpeechModelState` (`Wikily/Wikily/Settings/SpeechModelState.swift`) is the
+  shared observable both the first-run Setup Assistant and the **Model**
+  settings tab bind to, so they can never disagree about what state the model
+  is in. Both show the same "Download Speech Model" button and progress bar.
 
-`transcribe_local` looks for a model in this order:
+## What a user actually does
 
-1. `WIKILY_WHISPER_MODEL` — an explicit path (handy for development).
-2. `<app_data_dir>/whisper/ggml-*.en.bin` — the conventional drop-in location,
-   where `app_data_dir` is:
-   - macOS: `~/Library/Application Support/com.srikanthnani.pluely/whisper/`
-   - Linux: `~/.local/share/com.srikanthnani.pluely/whisper/`
+Nothing beyond clicking a button. There's no terminal, no script, no
+config file:
 
-Recommended models for streaming latency: `base.en` (default) or `small.en`,
-quantized.
+1. First launch: the Setup Assistant checks the model state. If it's not
+   installed, it shows a **Download Speech Model** button with a progress
+   bar.
+2. That download is Apple's own asset — a locale-specific speech model
+   distributed and updated by the OS, not something Wikily builds, hosts, or
+   bundles. Once it finishes, `SpeechModelInstaller.State` reports
+   `.installed`.
+3. From then on, every call is transcribed fully on-device. Nothing here
+   needs re-running unless the user changes their system language to one that
+   needs a different model, which the Model settings tab surfaces the same
+   way.
 
-## Quick start (dev)
-
-```bash
-scripts/setup-whisper.sh            # builds whisper.cpp + fetches ggml-base.en.bin
-# or: scripts/setup-whisper.sh small.en
-```
-
-The script builds `whisper-cli` and installs the model into the app-data
-location above. Then, in Wikily → **Wiki Engine → Privacy & Transcription**,
-make sure **On-device transcription** is enabled.
-
-For the CLI binary, until sidecar bundling lands (below) either:
-
-- point the app at a bundled sidecar named `whisper-cli`, or
-- run a dev build with `whisper-cli` available to the shell.
-
-## Remaining work to fully bundle (macOS release)
-
-These steps require a macOS build machine and are intentionally **not** wired
-into `tauri.conf.json` yet, because committing an `externalBin` entry without
-the binaries present would break `tauri build` on every platform.
-
-1. **Bundle the sidecar.** This is now staged as an **opt-in overlay** so the
-   default build never references a binary that isn't there:
-   - `src-tauri/tauri.whisper.conf.json` declares
-     `bundle.externalBin: ["binaries/whisper-cli"]`.
-   - `scripts/bundle-whisper-sidecar.sh` copies the CLI built by
-     `setup-whisper.sh` to `src-tauri/binaries/whisper-cli-<target-triple>`
-     (the naming Tauri expects). The binaries dir is git-ignored.
-   You build *with* the overlay to get a bundled app (see **Building a
-   whisper-bundled app** below). `.github/workflows/publish.yml` now does this
-   for the `aarch64-apple-darwin` release leg: it builds whisper.cpp via
-   `scripts/setup-whisper.sh` + `scripts/bundle-whisper-sidecar.sh` (cached
-   across runs) and passes `--config src-tauri/tauri.whisper.conf.json` to
-   `tauri-action`. The `x86_64-apple-darwin` leg is left as-is, since
-   GitHub's `macos-latest` runners are Apple Silicon and building an x86_64
-   `whisper-cli` there needs cross-compilation — that leg still produces a
-   working app, just without a bundled local model (falls back to cloud
-   transcription).
-2. **Ship a model.** Also handled by the overlay: it bundles
-   `resources/whisper/*.bin` into the app, `bundle-whisper-sidecar.sh` stages
-   the model there, and `transcribe_local` resolves a model from the app's
-   resource dir at runtime — so a distributed app is self-contained and end
-   users don't need to run `setup-whisper.sh`. (The `resources/whisper/` dir is
-   git-ignored; only the `.gitignore` is committed.)
-3. **Code-sign + notarize.** `.github/workflows/publish.yml` now passes the
-   Apple signing/notarization env vars to `tauri-action`, so all that's left is
-   to add the repo secrets — until then the build stays unsigned (users see
-   "Allow Anyway") but keeps succeeding. Add these repository secrets:
-   - `APPLE_CERTIFICATE` — base64 of your "Developer ID Application" `.p12`
-   - `APPLE_CERTIFICATE_PASSWORD` — password for that `.p12`
-   - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Name (TEAMID)`
-   - `APPLE_ID` — Apple ID email used for notarization
-   - `APPLE_PASSWORD` — an app-specific password for that Apple ID
-   - `APPLE_TEAM_ID` — your 10-character Apple Developer Team ID
-
-   (Or swap the last three for the App Store Connect API key trio
-   `APPLE_API_KEY` / `APPLE_API_ISSUER` / `APPLE_API_KEY_PATH`.) Once the
-   sidecar is bundled (step 1), it is included in the signed payload
-   automatically. Verify the notarized `.app`/`.dmg` on a Mac with
-   `spctl -a -vvv <path>` and `xcrun stapler validate <path>`.
-
-## Building a whisper-bundled app (at your Mac)
-
-Once you're on macOS (14+ Apple Silicon recommended), produce an app with
-whisper.cpp bundled in — three commands:
-
-```bash
-# 1. Build whisper.cpp + install a model into the app-data dir.
-scripts/setup-whisper.sh            # or: scripts/setup-whisper.sh small.en
-
-# 2. Stage the CLI as a Tauri sidecar (copies it to
-#    src-tauri/binaries/whisper-cli-<target-triple>).
-scripts/bundle-whisper-sidecar.sh
-
-# 3a. Run it in dev, WITH the overlay so the sidecar is bundled:
-npm run tauri dev -- --config src-tauri/tauri.whisper.conf.json
-
-# 3b. …or produce a distributable build:
-npm run tauri build -- --config src-tauri/tauri.whisper.conf.json
-```
-
-Then, in **Wiki Engine → Privacy & Transcription**, make sure **On-device
-transcription** is on. `transcribe_local` calls the bundled `whisper-cli`
-sidecar and resolves the model in this order: `WIKILY_WHISPER_MODEL` →
-`<app-data>/whisper/` (step 1) → the app's bundled resource dir (step 2).
-
-Notes:
-- **Self-contained distribution.** `bundle-whisper-sidecar.sh` copies the model
-  into `src-tauri/resources/whisper/`, and the overlay bundles it via the
-  `resources/whisper/*.bin` glob. So an app you hand to someone else already
-  contains the model and CLI — no `setup-whisper.sh` on their side. (If you
-  keep the model out, the app still works for anyone who has one in their
-  app-data dir or `WIKILY_WHISPER_MODEL`.)
-- **Overlay resources.** The overlay repeats the base bundle resources
-  (`info.plist`, `pluely.desktop`) because Tauri config-merge *replaces* arrays
-  rather than appending. If you add resources to `tauri.conf.json`, mirror them
-  in `tauri.whisper.conf.json` too.
-- **Model size.** `base.en` is ~140 MB, `small.en` ~460 MB — pick per your
-  size/accuracy tradeoff; the app probes base → small → tiny.
-- **Signing.** For a signed/notarized build, combine the overlay with the Apple
-  secrets from step 3 of "Remaining work" — the bundled sidecar + model are
-  signed as part of the app payload automatically.
+If a locale has no on-device model at all, `SpeechModelInstaller.state`
+reports `.unsupported` and the UI says so plainly rather than silently
+falling back to something else — there's nothing to fall back *to*.
 
 ## Verifying end-to-end
 
-Local transcription can only be exercised on a real desktop build (the audio
-capture + float-panel stack is macOS-first). `transcribe_local` invokes the
-whisper.cpp **sidecar**, which Tauri resolves only from a bundled binary — so
-to test on-device transcription you must run with the overlay (the
-"Building a whisper-bundled app" steps above), not a plain `npm run tauri dev`.
+Two headless diagnostics exercise this without opening the app:
 
-Without the overlay/sidecar, `transcribe_local` returns
-`LOCAL_TRANSCRIPTION_UNAVAILABLE` and the app falls back to your configured
-cloud provider (or shows the "finish local setup" hint if none is set) — that
-graceful-degradation path is worth confirming too. With the overlay: start a
-capture, speak, and confirm speaker text appears and a matching wiki card fades
-in.
+```bash
+# Install (or confirm) the on-device model for the current locale.
+Wikily --install-speech-model
+
+# Re-transcribe an existing WAV file or a directory of them, printing the
+# windowed match decision and the standalone top-3 candidates per utterance —
+# useful for isolating whether a bug is in transcription or in the wiki
+# matcher.
+Wikily --transcribe <path> --vault <wiki-path>
+```
+
+For the real capture path, `Wikily --probe-speech` builds the full audio
+pipeline (device capture → VAD → `SpeechAnalyzer`) against a live microphone
+and prints what comes back — see `Wikily/Wikily/Audio/CaptureDiagnostics.swift`
+for what it and the sibling `--probe-audio`/`--capture-diagnostics` flags do.

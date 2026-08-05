@@ -1,10 +1,20 @@
 # **Product Specification: Wikily (MVP)**
 
-**Status:** Draft | **Target Release:** Q3 2026 | **Author:** Product Management
+**Status:** Shipped (macOS) | **Author:** Product Management
 
-**Technical Strategy:** Fork of Pluely Core (Leveraging Pluely's macOS HUD & Audio Hooking)
+**Technical Strategy (superseded — see note below):** ~~Fork of Pluely Core (Leveraging Pluely's macOS HUD & Audio Hooking)~~
 
-> **Note:** This is a product specification. For the authoritative technical design — including the actual stack (Tauri v2 / Rust / React, **not** native Swift) — see [`Tech Spec Wikily.md`](./Tech%20Spec%20Wikily.md). Where this document referenced implementation details, those have been aligned to the real Pluely codebase.
+> **Note:** This is a product specification. For the authoritative technical design, see
+> [`Tech Spec Wikily.md`](./Tech%20Spec%20Wikily.md) and
+> [`docs/NATIVE_REWRITE_ROADMAP.md`](./docs/NATIVE_REWRITE_ROADMAP.md) for current status.
+>
+> **The "Pluely fork" strategy below was abandoned.** This document originally scoped Wikily as
+> reusing Pluely's Tauri/Rust/React HUD and audio code. That plan was dropped in favor of a
+> ground-up **native Swift / AppKit / SwiftUI** app — see Tech Spec §2 for why. The workflows,
+> personas, use cases, and KPIs below are unaffected by that change and still describe the actual
+> product; the sections that describe *how* it's built (§1.3, §1.5, §3.1, §3.3, §4) describe the
+> abandoned plan, not what shipped, and are marked as such inline rather than rewritten in place —
+> the Tech Spec is the one document meant to be the current, authoritative build reference.
 
 ## **1\. Product Overview & Vision**
 
@@ -22,7 +32,10 @@ Customer support and success representatives have virtually no prep time between
 * Inaccurate or "I'll have to get back to you on that" responses.  
 * High cognitive overload and conversational anxiety for the rep.
 
-### **1.3 The Solution (The Pluely Fork Strategy)**
+### **1.3 The Solution (The Pluely Fork Strategy — superseded, see top note)**
+
+> Historical: describes the abandoned reuse-Pluely plan. What shipped is a native Swift app built
+> from scratch — see Tech Spec §2.
 
 Rather than building a macOS audio routing driver and custom UI panel from scratch, Wikily is built as a **direct fork of Pluely**.
 
@@ -39,7 +52,7 @@ Customer Service Representatives (CSRs) will experience a significant drop in ca
 
 * **Cluely:** Rely on cloud-heavy post-call analyses or clunky, manual, search-first sidebar panels.  
 * **Pluely (Upstream Foundation):** Stable macOS utility that provides manual hotkey search overlays and cloud-based call recording transcription.  
-* **Wikily (Our Fork):** Real-time, local-first proactive overlay that maps speech-to-intent and surfaces pre-linked, stateful wiki structures entirely offline.
+* **Wikily (native macOS build):** Real-time, local-first proactive overlay that maps speech-to-intent and surfaces pre-linked, stateful wiki structures entirely offline.
 
 ## **2\. Target User & Core Workflow**
 
@@ -94,7 +107,11 @@ To validate the core hypothesis, the system must handle highly dynamic, project-
 |     \+-------------------------------------------+     |  
 \+-------------------------------------------------------+
 
-### **3.1 Live Audio Capture & Local Transcription (Pluely-Enhanced)**
+### **3.1 Live Audio Capture & Local Transcription (Pluely-Enhanced — superseded, see top note)**
+
+> Historical: describes the abandoned reuse-Pluely plan. What shipped: native CoreAudio process
+> tap + aggregate device for dual-stream capture, and Apple's on-device `SpeechAnalyzer` for
+> transcription (no Whisper.cpp, no bundled model) — see Tech Spec §3–5.
 
 * **Inherited System Audio Routing:** Use Pluely’s existing system-audio capture pipeline (CoreAudio on macOS) to tap outgoing mic audio and incoming Zoom client audio cleanly.  
 * **On-Device/Low-Latency Transcription:** Replace Pluely's cloud-transcription endpoints with a lightweight, local transcription model (e.g., Whisper.cpp running on Apple Silicon Neural Engine) to keep processing entirely on-device.  
@@ -109,9 +126,18 @@ The core database is a structured local directory of .md files. Rather than trad
   * Build a local vector index of the markdown summaries.  
   * Perform real-time matching using Cosine Similarity:![][image1]  
     where ![][image2] is the embedding vector of the active transcript window, and ![][image3] represents the document/header embedding of pages in the local wiki directory.  
+
+  > What shipped uses this same cosine-similarity idea, but over **TF-IDF vectors, not learned
+  > embeddings** — no embeddings model, no vector-index library. Proven equivalent to a reference
+  > implementation to 6 decimal places, and empirically robust to transcription noise. See Tech
+  > Spec §3.2/§4.
 * **Entity & Concept Extraction:** Extract entities (e.g., product names, project names like "Becky promotion", error codes) and map them to existing file names or \#tags in the markdown vault.
 
-### **3.3 Proactive macOS HUD / Overlay (Pluely Fork UI)**
+### **3.3 Proactive macOS HUD / Overlay (Pluely Fork UI — superseded, see top note)**
+
+> Historical: describes the abandoned reuse-Pluely plan. What shipped: a native AppKit `NSPanel`
+> (`.nonactivatingPanel`, `.floating`, `.canJoinAllSpaces` + `.fullScreenAuxiliary`) hosting SwiftUI
+> content directly — no `tauri-nspanel`. See Tech Spec §4.
 
 * **Unobtrusive UI Design:** Repurpose Pluely's floating overlay panel (an NSPanel surfaced via `tauri-nspanel`, which supports remaining on top of full-screen Zoom windows, custom opacity, dragging, and resizing).  
 * **Frictionless Actions:**  
@@ -119,7 +145,12 @@ The core database is a structured local directory of .md files. Rather than trad
   * **Copy-to-Clipboard:** Quick buttons to copy status updates or links.  
   * **Deep Linking:** Clicking a card's title opens the matching Markdown file locally or remote browser link (e.g., Notion) directly.
 
-## **4\. Technical Architecture (MVP)**
+## **4\. Technical Architecture (MVP) — superseded, see top note**
+
+> Historical: the diagram and stack below describe the abandoned Tauri/Pluely-fork plan. For the
+> actual shipped architecture (native Swift/AppKit/SwiftUI, no Rust, no React, no SQLite), see
+> [`Tech Spec Wikily.md`](./Tech%20Spec%20Wikily.md) §3–4, which has an equivalent diagram for what
+> really got built.
 
 \+------------------------------------------------------------------------+  
 |                       Pluely Core (Upstream, Tauri v2)                 |  
