@@ -58,6 +58,10 @@ final class AppSettings {
         static let outputDeviceID = "settings.audio.outputDeviceID"
         static let capturesMicrophone = "settings.audio.capturesMicrophone"
         static let hasCompletedOnboarding = "settings.onboarding.completed"
+        static let connectedCalendarAccounts = "settings.calendar.accounts"
+        static let meetingRemindersEnabled = "settings.calendar.remindersEnabled"
+        static let googleCalendarClientID = "settings.calendar.googleClientID"
+        static let outlookCalendarClientID = "settings.calendar.outlookClientID"
 
         /// Phase 4's key, written by `CallSession` before this type existed.
         /// Read once at startup and carried into `wikiFolderPath`.
@@ -225,6 +229,53 @@ final class AppSettings {
         }
     }
 
+    // MARK: - Calendar
+
+    /// Connected Google/Outlook calendar accounts. Metadata only — see
+    /// `CalendarTokenStoring` for why the actual OAuth tokens live in the
+    /// Keychain instead of here.
+    ///
+    /// `CalendarAccountStore` is the only writer; everything else (the
+    /// Calendar settings tab, the sync coordinator) treats this as read-only
+    /// and goes through the store to change it.
+    var connectedCalendarAccounts: [CalendarAccount] = [] {
+        didSet {
+            guard !isRestoring, connectedCalendarAccounts != oldValue else { return }
+            write(connectedCalendarAccounts, forKey: Key.connectedCalendarAccounts)
+        }
+    }
+
+    /// Whether Wikily should notify the user one minute before a connected
+    /// calendar's meetings start. On by default: a user who connects a
+    /// calendar at all is asking for this, and the notification-permission
+    /// prompt (triggered the first time this is actually needed) is the real
+    /// point where they can say no.
+    var meetingRemindersEnabled: Bool = true {
+        didSet {
+            guard !isRestoring, meetingRemindersEnabled != oldValue else { return }
+            defaults.set(meetingRemindersEnabled, forKey: Key.meetingRemindersEnabled)
+        }
+    }
+
+    /// OAuth client ID for Wikily's Google Cloud "Desktop app" registration.
+    /// Not a secret — see `GoogleCalendarClient` — but per-build, so Wikily
+    /// ships with none and Settings › Calendar asks for one. See
+    /// `docs/CALENDAR_INTEGRATION.md`.
+    var googleCalendarClientID: String = "" {
+        didSet {
+            guard !isRestoring, googleCalendarClientID != oldValue else { return }
+            defaults.set(googleCalendarClientID, forKey: Key.googleCalendarClientID)
+        }
+    }
+
+    /// OAuth client ID for Wikily's Azure "public client" app registration.
+    var outlookCalendarClientID: String = "" {
+        didSet {
+            guard !isRestoring, outlookCalendarClientID != oldValue else { return }
+            defaults.set(outlookCalendarClientID, forKey: Key.outlookCalendarClientID)
+        }
+    }
+
     // MARK: - Wiring
 
     /// Re-index the current folder, returning what the new index contains.
@@ -281,6 +332,14 @@ final class AppSettings {
             capturesMicrophone = defaults.bool(forKey: Key.capturesMicrophone)
         }
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
+
+        connectedCalendarAccounts =
+            Self.read([CalendarAccount].self, forKey: Key.connectedCalendarAccounts, from: defaults) ?? []
+        if defaults.object(forKey: Key.meetingRemindersEnabled) != nil {
+            meetingRemindersEnabled = defaults.bool(forKey: Key.meetingRemindersEnabled)
+        }
+        googleCalendarClientID = defaults.string(forKey: Key.googleCalendarClientID) ?? ""
+        outlookCalendarClientID = defaults.string(forKey: Key.outlookCalendarClientID) ?? ""
 
         isRestoring = false
     }
@@ -376,12 +435,20 @@ final class AppSettings {
     /// Wipe every key this type owns. Only used by tests and by a future
     /// "reset settings" affordance; the legacy key goes too so a reset is a
     /// genuine reset rather than one that resurrects the old folder.
+    ///
+    /// Clears `connectedCalendarAccounts` but not the Keychain tokens those
+    /// accounts point at — the real "reset settings" affordance this exists
+    /// for should call `CalendarAccountStore.disconnect(_:)` for each account
+    /// first, the same way it should stop any in-progress call, rather than
+    /// this type reaching into the Keychain on its own.
     func resetAll() {
         for key in [
             Key.launchAtLogin, Key.wikiFolderPath, Key.wikiIndexStats, Key.qaModel,
             Key.suggestionFrequency, Key.confidenceThreshold, Key.overlayOpacity,
             Key.overlayFontSize, Key.inputDeviceID, Key.outputDeviceID, Key.capturesMicrophone,
             Key.hasCompletedOnboarding, Key.legacyWikiFolderPath,
+            Key.connectedCalendarAccounts, Key.meetingRemindersEnabled,
+            Key.googleCalendarClientID, Key.outlookCalendarClientID,
         ] {
             defaults.removeObject(forKey: key)
         }

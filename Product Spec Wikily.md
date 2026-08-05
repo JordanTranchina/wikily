@@ -145,6 +145,27 @@ The core database is a structured local directory of .md files. Rather than trad
   * **Copy-to-Clipboard:** Quick buttons to copy status updates or links.  
   * **Deep Linking:** Clicking a card's title opens the matching Markdown file locally or remote browser link (e.g., Notion) directly.
 
+### **3.4 Calendar Meeting Reminders (shipped, post-MVP addition)**
+
+Not part of the original MVP scope above or the abandoned Pluely-fork plan — added afterward,
+directly against the native app. Documented here rather than only in the Tech Spec because it's a
+user-facing workflow change: Wikily now closes the gap between "a meeting is about to start" and
+"Wikily is listening," instead of assuming the user remembers to open the app themselves.
+
+* **Connect a calendar:** Settings › Calendar supports connecting a Google Calendar or an Outlook
+  / Microsoft 365 calendar via OAuth. Either, both, or neither — entirely optional, and off by
+  default until the user connects something.
+* **The reminder:** for any connected-calendar meeting with a detected Zoom, Google Meet, Teams,
+  or Webex join link, Wikily fires a local notification one minute before it starts. Tapping it
+  (or its "Join & Open Wikily" action) opens the meeting link and brings Wikily's HUD forward in
+  the same motion — the point is removing a step, not adding a second thing to check.
+* **What this is not:** Wikily doesn't create, edit, or write to a calendar (read-only access),
+  doesn't remind about events with no detected call link (an all-day event or an in-person meeting
+  has nothing to "join"), and doesn't touch call audio or the transcript pipeline — this is a
+  separate, additive subsystem, not a change to how matching or transcription works.
+* See `Tech Spec Wikily.md` §4/§6 and `docs/CALENDAR_INTEGRATION.md` for the implementation and
+  the privacy scoping (this is the one place Wikily talks to a cloud API by design).
+
 ## **4\. Technical Architecture (MVP) — superseded, see top note**
 
 > Historical: the diagram and stack below describe the abandoned Tauri/Pluely-fork plan. For the

@@ -22,7 +22,8 @@ got here. Every component is cited by real file path so engineers can navigate d
 **In scope (shipped):** local dual-stream audio capture, local on-device streaming transcription,
 local markdown wiki indexing (with incremental re-scan), local TF-IDF semantic matching, a
 proactive floating HUD with quick actions and grounded Q&A ("Ask Wikily"), a full Settings app,
-first-run onboarding, persistence.
+first-run onboarding, persistence, opt-in Google/Outlook calendar sync with a "meeting starts in
+1 minute" reminder (§6, §4's Calendar row, `docs/CALENDAR_INTEGRATION.md`).
 
 **Out of scope (post-MVP):** Notion cloud sync, multi-language wiki compilation, team sync,
 engagement analytics beyond local logging.
@@ -150,6 +151,7 @@ observes directly — no explicit event bus; `@Observable` + SwiftUI's own diffi
 | Model backends | `Models/{AppleFoundationModelService,LocalServerModelService,LanguageModelService,LocalServerDiscovery,ModelDiagnostics}.swift` | Apple's on-device Foundation Models framework, or an OpenAI-compatible local server (Ollama/LM Studio) auto-discovered by port probing — one `LanguageModelService` protocol, two backends. |
 | Settings & persistence | `AppState/AppSettings.swift`, `Settings/*.swift` | `UserDefaults`-backed, namespaced keys (`settings.<area>.<name>`) so a non-sandboxed app's flat defaults domain doesn't collide with future features. Injectable `UserDefaults` suite so tests never touch the real user's prefs (`Wikily.app` is its own `TEST_HOST`; see `DefaultsIsolationTests`). |
 | First-run onboarding | `Onboarding/{OnboardingView,OnboardingWindowController,OnboardingStep}.swift` | Presented on first launch, or Settings opens instead on every subsequent launch — `MenuBarController.presentStartupWindow()`. |
+| Calendar sync + meeting reminders | `Calendar/*.swift`, `Settings/CalendarSettingsView.swift`, `Settings/NotificationPermission.swift` | Opt-in Google/Outlook OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`, no client secret), Keychain-backed tokens, a 60-second poll (`CalendarSyncCoordinator`) merging upcoming events, and a local `UNUserNotificationCenter` reminder one minute before any event with a detected Zoom/Meet/Teams/Webex join link (`MeetingReminderPlan`, `MeetingNotificationScheduler`). The one deliberate exception to §6's "no cloud" posture — see there and `docs/CALENDAR_INTEGRATION.md`. |
 
 ---
 
@@ -166,16 +168,18 @@ After that one download, transcription needs no network at all.
 ## 6. Local-First, No Cloud Fallback
 
 The product spec's local-first requirement is not a default-with-opt-out here — there is no cloud
-speech path at all. Transcription is always `SpeechAnalyzer` on-device. The one place a network
-call happens outside the initial model download is the **Q&A model**, and even that is local by
-default:
+speech path at all. Transcription is always `SpeechAnalyzer` on-device. Outside the initial model
+download, the two places a network call happens are the **Q&A model** (local by default) and, as
+of the calendar integration, **calendar sync** — and unlike the Q&A model, that one is never local,
+by its nature:
 
 | Concern | Behavior |
 |---|---|
 | Transcription | Always on-device (`SpeechAnalyzer`); no cloud STT exists in this codebase |
 | Wiki matching | Always local (TF-IDF over a locally-indexed folder); no embeddings API call |
 | Q&A model | Apple on-device Foundation Models by default, **or** a local server (Ollama/LM Studio) the user points at explicitly — both stay on the user's Mac or LAN. Nothing routes to a hosted LLM API. |
-| Persistence | Settings in `UserDefaults`, wiki index cache as local JSON. Transcript lives only in the in-memory sliding window — never written to disk. |
+| Calendar sync | **Off by default, opt-in, and the one deliberate exception.** Only when the user connects a Google or Outlook account in Settings › Calendar does Wikily talk to Google's or Microsoft's own OAuth/Calendar APIs directly — to read event times, titles, and join links so it can remind the user a meeting is starting. Nothing about a call (audio, transcript, matched pages) is sent alongside that; the two subsystems don't share code. See `docs/CALENDAR_INTEGRATION.md`. |
+| Persistence | Settings in `UserDefaults`, wiki index cache as local JSON. Transcript lives only in the in-memory sliding window — never written to disk. Calendar OAuth tokens are the one exception to "`UserDefaults` for everything" — they live in the Keychain (`CalendarTokenStoring`), not alongside ordinary preferences. |
 
 **`match_log`** (local engagement telemetry, product spec §7) was scoped for the KPI but hasn't
 been built — it would be a small local JSONL file if wanted, not the SQLite table the old fork plan
@@ -225,7 +229,12 @@ sequence, phases 0–6 done, phase 7 remaining:
 - **Filesystem scope:** the app reads only the user-selected wiki folder.
 - **Permissions:** microphone and speech-recognition usage descriptions are declared in the app's
   Info.plist keys (`NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`); the
-  system prompts on first use.
+  system prompts on first use. Notification authorization (for meeting reminders) is requested the
+  same way, lazily, the first time it's actually needed rather than at launch.
+- **Calendar sync is opt-in and narrowly scoped:** off until the user connects an account; reads
+  calendar metadata only (`calendar.readonly` / `Calendars.Read` — never write access); OAuth
+  tokens live in the Keychain, not `UserDefaults`; disconnecting an account deletes its Keychain
+  entry immediately. See §6 and `docs/CALENDAR_INTEGRATION.md`.
 
 ---
 
@@ -253,7 +262,13 @@ itself, docs, and a real release/signing pipeline). Don't duplicate that list he
 - Model backends: `Models/{LanguageModelService,AppleFoundationModelService,LocalServerModelService,LocalServerDiscovery,ModelDiagnostics}.swift`
 - Settings: `AppState/AppSettings.swift`, `Settings/*.swift`
 - Onboarding: `Onboarding/*.swift`
-- Tests: `WikilyTests/` (242 tests, 23 suites — `xcodebuild test`)
+- Calendar sync + meeting reminders: `Calendar/*.swift` (`CalendarAccountStore`,
+  `CalendarSyncCoordinator`, `MeetingNotificationScheduler`, `GoogleCalendarClient`,
+  `OutlookCalendarClient`, `CalendarTokenStore`, `OAuthBrowserSession`, `MeetingLinkExtractor`),
+  `Settings/{CalendarSettingsView,NotificationPermission}.swift` — see
+  `docs/CALENDAR_INTEGRATION.md`
+- Tests: `WikilyTests/` (`xcodebuild test`; the 242-test/23-suite figure elsewhere in this doc
+  predates the calendar suites added here and hasn't been re-counted)
 
 ### 11.2 Glossary
 - **HUD / overlay** — the always-on-top floating `NSPanel` (`Overlay/OverlayPanel.swift`).
@@ -263,3 +278,5 @@ itself, docs, and a real release/signing pipeline). Don't duplicate that list he
 - **Ask Wikily** — the grounded Q&A field on the HUD card, plus its quick-action shortcuts.
 - **Local-first** — all processing on-device; there is no cloud path to opt into for transcription
   or matching, and the Q&A model defaults to on-device too.
+- **Meeting reminder** — the local notification `MeetingNotificationScheduler` fires one minute
+  before a connected calendar's meeting starts, for any event with a detected join link.

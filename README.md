@@ -33,6 +33,10 @@ answered from whatever page matched plus the live transcript.
   local server (Ollama, LM Studio) you point it at explicitly. Nothing routes to a hosted LLM.
 - **Nothing about a call is written to disk.** The transcript lives only in an in-memory sliding
   window for as long as the call runs.
+- **The one opt-in exception is calendar sync.** Connecting a Google or Outlook calendar (for
+  meeting reminders — see [Features](#features)) is the only thing in Wikily that talks to a cloud
+  API by design, and it never runs unless you connect an account. It never touches call audio, the
+  transcript, or the wiki matcher.
 
 See [`Tech Spec Wikily.md`](Tech%20Spec%20Wikily.md) for the real architecture and file-by-file
 citations, and [`Product Spec Wikily.md`](Product%20Spec%20Wikily.md) for the product thinking
@@ -52,7 +56,13 @@ citations, and [`Product Spec Wikily.md`](Product%20Spec%20Wikily.md) for the pr
   required.
 - **A real Settings app** — General (login item, permissions), Knowledge Base (wiki folder,
   index stats, re-scan), Model (on-device or local-server Q&A backend), Behavior (match
-  sensitivity, overlay transparency and text size), Audio (input/output device selection).
+  sensitivity, overlay transparency and text size), Audio (input/output device selection),
+  Calendar (see below).
+- **Calendar meeting reminders** — connect a Google or Outlook calendar (Settings › Calendar) and
+  Wikily notifies you one minute before a meeting with a Zoom/Meet/Teams/Webex link starts;
+  tapping it opens the link and brings Wikily's HUD forward. Entirely opt-in, and the one
+  deliberate exception to local-first — see
+  [`docs/CALENDAR_INTEGRATION.md`](docs/CALENDAR_INTEGRATION.md).
 - **First-run onboarding**, so pointing Wikily at a wiki folder and picking a Q&A model doesn't
   require reading this file first.
 - **In-app updates** — Sparkle checks for new releases and installs them with no manual

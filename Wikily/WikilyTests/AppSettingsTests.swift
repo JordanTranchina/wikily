@@ -46,6 +46,10 @@ struct AppSettingsTests {
             #expect(settings.capturesMicrophone)
             #expect(!settings.launchAtLogin)
             #expect(!settings.hasCompletedOnboarding)
+            #expect(settings.connectedCalendarAccounts.isEmpty)
+            #expect(settings.meetingRemindersEnabled)
+            #expect(settings.googleCalendarClientID.isEmpty)
+            #expect(settings.outlookCalendarClientID.isEmpty)
         }
     }
 
@@ -88,6 +92,11 @@ struct AppSettingsTests {
             settings.outputDeviceID = "SpeakerUID"
             settings.capturesMicrophone = false
             settings.hasCompletedOnboarding = true
+            let account = CalendarAccount(provider: .google, email: "person@example.com")
+            settings.connectedCalendarAccounts = [account]
+            settings.meetingRemindersEnabled = false
+            settings.googleCalendarClientID = "google-client-id"
+            settings.outlookCalendarClientID = "outlook-client-id"
 
             let reloaded = AppSettings(defaults: defaults, launchAtLogin: .inert)
             #expect(reloaded.wikiFolderPath == "/tmp/vault")
@@ -101,6 +110,10 @@ struct AppSettingsTests {
             #expect(reloaded.outputDeviceID == "SpeakerUID")
             #expect(!reloaded.capturesMicrophone)
             #expect(reloaded.hasCompletedOnboarding)
+            #expect(reloaded.connectedCalendarAccounts == [account])
+            #expect(!reloaded.meetingRemindersEnabled)
+            #expect(reloaded.googleCalendarClientID == "google-client-id")
+            #expect(reloaded.outlookCalendarClientID == "outlook-client-id")
         }
     }
 
@@ -336,6 +349,23 @@ struct AppSettingsTests {
             #expect(
                 AppSettings(defaults: defaults, launchAtLogin: .inert).wikiFolderPath == nil
             )
+        }
+    }
+
+    @Test func resetClearsCalendarSettingsToo() throws {
+        try withSettings { settings, defaults in
+            settings.connectedCalendarAccounts = [CalendarAccount(provider: .outlook, email: "a@b.com")]
+            settings.meetingRemindersEnabled = false
+            settings.googleCalendarClientID = "abc"
+            settings.outlookCalendarClientID = "def"
+
+            settings.resetAll()
+
+            let reloaded = AppSettings(defaults: defaults, launchAtLogin: .inert)
+            #expect(reloaded.connectedCalendarAccounts.isEmpty)
+            #expect(reloaded.meetingRemindersEnabled)
+            #expect(reloaded.googleCalendarClientID.isEmpty)
+            #expect(reloaded.outlookCalendarClientID.isEmpty)
         }
     }
 }

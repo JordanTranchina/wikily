@@ -9,6 +9,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     case model
     case behavior
     case audio
+    case calendar
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .model: "Model"
         case .behavior: "Behavior"
         case .audio: "Audio"
+        case .calendar: "Calendar"
         }
     }
 
@@ -29,6 +31,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .model: "cpu"
         case .behavior: "slider.horizontal.3"
         case .audio: "waveform"
+        case .calendar: "calendar"
         }
     }
 
@@ -82,6 +85,8 @@ struct SettingsRootView: View {
                 BehaviorSettingsView(settings: settings)
             case .audio:
                 AudioSettingsView(settings: settings)
+            case .calendar:
+                CalendarSettingsView(settings: settings)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
