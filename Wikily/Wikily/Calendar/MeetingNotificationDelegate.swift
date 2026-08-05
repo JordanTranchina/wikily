@@ -41,7 +41,10 @@ final class MeetingNotificationDelegate: NSObject, UNUserNotificationCenterDeleg
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
+        // `@Sendable`: this is the one path that carries `completionHandler`
+        // into a `Task { @MainActor in }` below, and only a `@Sendable`
+        // closure can safely cross that isolation boundary.
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
         guard response.actionIdentifier != UNNotificationDismissActionIdentifier else {
             completionHandler()
