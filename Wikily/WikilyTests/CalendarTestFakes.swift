@@ -108,7 +108,7 @@ final class FakeNotificationCenter: UNUserNotificationCenterProviding, @unchecke
         self.categories = categories
     }
 
-    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: ((Error?) -> Void)?) {
+    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: (@Sendable (Error?) -> Void)?) {
         pendingRequests[request.identifier] = request
         completionHandler?(nil)
     }

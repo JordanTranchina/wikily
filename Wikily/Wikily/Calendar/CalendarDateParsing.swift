@@ -8,13 +8,20 @@ import Foundation
 /// timestamp that lacks them, and vice versa — Google sends both shapes in
 /// practice, so this tries the stricter one first and falls back.
 enum RFC3339DateParsing {
-    private static let withFraction: ISO8601DateFormatter = {
+    // `ISO8601DateFormatter` isn't `Sendable` (it's a mutable `NSFormatter`
+    // subclass), but both instances here are configured once above and only
+    // ever read from via `date(from:)` afterward — never mutated again — so
+    // sharing them across threads is safe in practice even though the
+    // compiler can't prove it. `nonisolated(unsafe)` says exactly that,
+    // rather than pushing every caller of `date(from:)` onto `@MainActor` for
+    // no reason.
+    nonisolated(unsafe) private static let withFraction: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    private static let withoutFraction: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let withoutFraction: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter

@@ -10,7 +10,10 @@ import UserNotifications
 /// authorization granted on the test host to verify the scheduling logic.
 protocol UNUserNotificationCenterProviding {
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>)
-    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: ((Error?) -> Void)?)
+    // `@Sendable` to match `UNUserNotificationCenter`'s own declared signature
+    // — its completion handler can fire on a background thread, so the SDK
+    // requires it.
+    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: (@Sendable (Error?) -> Void)?)
     func removePendingNotificationRequests(withIdentifiers identifiers: [String])
 }
 
