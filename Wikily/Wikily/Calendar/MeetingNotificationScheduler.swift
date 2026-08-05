@@ -30,9 +30,13 @@ extension UNUserNotificationCenter: UNUserNotificationCenterProviding {}
 @MainActor
 final class MeetingNotificationScheduler {
 
-    static let categoryIdentifier = "com.wikily.Wikily.meetingReminder"
-    static let joinActionIdentifier = "com.wikily.Wikily.joinMeeting"
-    static let joinURLUserInfoKey = "joinURL"
+    // `nonisolated`: plain string constants, safe from any context, and
+    // `MeetingNotificationDelegate` — which reads `joinURLUserInfoKey` from a
+    // `nonisolated` `UNUserNotificationCenterDelegate` callback — needs to
+    // reach them without hopping onto `@MainActor` first.
+    nonisolated static let categoryIdentifier = "com.wikily.Wikily.meetingReminder"
+    nonisolated static let joinActionIdentifier = "com.wikily.Wikily.joinMeeting"
+    nonisolated static let joinURLUserInfoKey = "joinURL"
 
     private let logger = Logger(subsystem: "com.wikily.Wikily", category: "MeetingNotificationScheduler")
 
