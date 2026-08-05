@@ -1,6 +1,7 @@
 import OSLog
 import Sparkle
 import SwiftUI
+import UserNotifications
 
 /// Wikily — a local-first call companion.
 ///
@@ -40,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlay: OverlayWindowController?
     private var menuBar: MenuBarController?
     private var updaterController: SPUStandardUpdaterController?
+    private var calendarSync: CalendarSyncCoordinator?
+    private var meetingScheduler: MeetingNotificationScheduler?
+    private var meetingNotificationDelegate: MeetingNotificationDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Headless diagnostics: run, report, exit without building UI.
@@ -204,10 +208,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updater: updaterController.updater
         )
 
+        // Calendar sync and meeting reminders. Built unconditionally — both
+        // stay silent with nothing to do until the user connects an account
+        // in Settings › Calendar — rather than only when one is already
+        // connected, so a fresh connect during this session starts syncing
+        // immediately without a relaunch.
+        let calendarSync = CalendarSyncCoordinator.shared
+        let meetingScheduler = MeetingNotificationScheduler(coordinator: calendarSync, settings: settings)
+        let notificationDelegate = MeetingNotificationDelegate(
+            openJoinURL: { url in NSWorkspace.shared.open(url) },
+            showOverlay: { [weak overlay] in overlay?.show() }
+        )
+        UNUserNotificationCenter.current().delegate = notificationDelegate
+        meetingScheduler.start()
+        calendarSync.start()
+
         self.session = session
         self.overlay = overlay
         self.menuBar = menuBar
         self.updaterController = updaterController
+        self.calendarSync = calendarSync
+        self.meetingScheduler = meetingScheduler
+        self.meetingNotificationDelegate = notificationDelegate
 
         AppMainMenu.install(
             menuBar: menuBar,

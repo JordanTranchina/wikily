@@ -14,5 +14,25 @@
 	<string>https://raw.githubusercontent.com/JordanTranchina/wikily/master/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>vLWc5D36R1gSW1OzsVgKXz5O2zMjLJ9Dn3cYbz62ZSg=</string>
+
+	<!--
+	  The OAuth redirect URI calendar sign-in (Settings › Calendar) sends
+	  Google/Microsoft's browser flow back to — see CalendarOAuthConstants.swift.
+	  ASWebAuthenticationSession intercepts a matching callback URL directly, so
+	  nothing in AppDelegate has to implement application(_:open:); this
+	  declaration is what lets the OS recognize "wikily://" as belonging to this
+	  app in the first place.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.wikily.Wikily.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>wikily</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

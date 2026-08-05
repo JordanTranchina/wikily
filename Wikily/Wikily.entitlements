@@ -16,8 +16,15 @@
 	<true/>
 
 	<!--
-	  Localhost only: talking to a user-run OpenAI-compatible model server
-	  (Ollama :11434, LM Studio :1234, llama-server :8080). No remote hosts.
+	  Two things use this. Talking to a user-run OpenAI-compatible model server
+	  (Ollama :11434, LM Studio :1234, llama-server :8080) stays loopback-only.
+	  The one deliberate exception is Settings › Calendar: when a user opts in
+	  by connecting a Google or Outlook account, Wikily reaches Google's and
+	  Microsoft's OAuth/Calendar endpoints directly to sync event times and
+	  join links for the meeting-reminder notification — see
+	  `docs/CALENDAR_INTEGRATION.md` and `Tech Spec Wikily.md` §6. Nothing else
+	  in the app calls a remote host; call audio and transcripts still never
+	  leave the machine.
 	-->
 	<key>com.apple.security.network.client</key>
 	<true/>
