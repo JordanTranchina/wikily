@@ -22,7 +22,10 @@ enum NotificationPermission {
 
     static func status() async -> Status {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        switch settings.authorizationStatus {
+        // Explicit `return` rather than an implicit trailing switch: with a
+        // `let` ahead of it, the switch's branches have no contextual type to
+        // resolve `.granted`/`.denied`/etc. against without one.
+        return switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral: .granted
         case .denied: .denied
         case .notDetermined: .notDetermined
